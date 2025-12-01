@@ -24,6 +24,7 @@ python-docx==1.1.0
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 python-multipart>=0.0.6
+sse-starlette>=1.8.2
 
 # File parsing for Data Room Agent
 PyPDF2>=3.0.1

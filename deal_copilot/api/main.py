@@ -1,6 +1,7 @@
 """
 FastAPI Backend for Deal Co-Pilot
 Exposes Deep Research Agent as REST API
+Human-in-the-Loop workflow with SSE streaming
 """
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, UploadFile, File, Form
@@ -14,6 +15,7 @@ from datetime import datetime
 import os
 import sys
 from io import BytesIO
+from sse_starlette.sse import EventSourceResponse
 
 # Add project root to path for imports
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -83,6 +85,54 @@ completed_reports = {}  # Store completed reports
 excel_files = {}  # Store generated Excel files {report_id: BytesIO}
 risk_scanner_reports = {}  # Store risk scanner outputs {report_id: Dict}
 ic_memos = {}  # Store IC memo outputs {report_id: Dict}
+
+# Workflow state for human-in-the-loop
+workflow_states = {}  # {report_id: WorkflowState}
+
+class WorkflowState:
+    """Track the state of a step-by-step analysis workflow"""
+    ALL_STEPS = ["deep_research", "data_room", "risk_scanner", "ic_memo"]
+    
+    def __init__(self, report_id: str, company_info: Dict, files: List[Dict], agent_type: str):
+        self.report_id = report_id
+        self.company_info = company_info
+        self.files = files
+        self.agent_type = agent_type
+        self.has_files = len(files) > 0
+        
+        # Skip data_room if no files provided
+        if self.has_files:
+            self.steps = self.ALL_STEPS.copy()
+        else:
+            self.steps = ["deep_research", "risk_scanner", "ic_memo"]
+        
+        self.current_step = 0  # Index into steps
+        self.step_status = {step: "pending" for step in self.ALL_STEPS}
+        if not self.has_files:
+            self.step_status["data_room"] = "skipped"
+        self.step_outputs = {}  # {step_name: output}
+        self.awaiting_review = False
+        self.created_at = datetime.now().isoformat()
+    
+    def get_current_step_name(self) -> str:
+        if self.current_step < len(self.steps):
+            return self.steps[self.current_step]
+        return "completed"
+    
+    def to_dict(self) -> Dict:
+        return {
+            "report_id": self.report_id,
+            "company_info": self.company_info,
+            "current_step": self.get_current_step_name(),
+            "current_step_index": self.current_step,
+            "total_steps": len(self.steps),
+            "steps": self.steps,
+            "has_files": self.has_files,
+            "step_status": self.step_status,
+            "awaiting_review": self.awaiting_review,
+            "created_at": self.created_at,
+            "has_outputs": {step: step in self.step_outputs for step in self.ALL_STEPS}
+        }
 
 
 # ============================================================================
@@ -542,15 +592,16 @@ async def download_excel(report_id: str):
 
 @app.post("/api/complete-analysis")
 async def create_complete_analysis(
-    files: List[UploadFile] = File(...),
     prompt: str = Form(...),
     agent_type: str = Form("openai"),
+    files: List[UploadFile] = File(default=[]),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """
-    Run complete analysis: Deep Research + Data Room + Risk Scanner + IC Memo
+    Run complete analysis: Deep Research + Data Room (if files) + Risk Scanner + IC Memo
     
     This orchestrates all agents in sequence and generates the final IC memo.
+    Data Room agent is skipped if no files are provided.
     """
     try:
         # Parse company info
@@ -625,11 +676,13 @@ async def run_complete_analysis_async(
     files: List[Dict],
     agent_type: str
 ):
-    """Run all agents in sequence"""
+    """Run all agents in sequence. Data Room is skipped if no files provided."""
     try:
         research_jobs[report_id]["status"] = "processing"
         research_jobs[report_id]["message"] = "Starting complete analysis..."
         research_jobs[report_id]["progress"] = 0
+        
+        has_files = len(files) > 0
         
         # Progress callback
         def progress_callback(step: str, progress: int, message: str):
@@ -639,7 +692,7 @@ async def run_complete_analysis_async(
         
         loop = asyncio.get_event_loop()
         
-        # Step 1: Deep Research (0-25%)
+        # Step 1: Deep Research (0-30% or 0-40% if no files)
         research_jobs[report_id]["message"] = "Running deep research..."
         research_jobs[report_id]["current_step"] = "deep_research"
         research_jobs[report_id]["progress"] = 5
@@ -658,22 +711,27 @@ async def run_complete_analysis_async(
             company_info.region,
             company_info.hq_location
         )
-        research_jobs[report_id]["progress"] = 25
+        research_jobs[report_id]["progress"] = 30 if has_files else 40
         
-        # Step 2: Data Room (25-50%)
-        research_jobs[report_id]["message"] = "Processing data room files..."
-        research_jobs[report_id]["current_step"] = "data_room"
+        # Step 2: Data Room (30-55%) - SKIP if no files
+        data_room_report = None
+        if has_files:
+            research_jobs[report_id]["message"] = "Processing data room files..."
+            research_jobs[report_id]["current_step"] = "data_room"
+            
+            data_room_agent = DataRoomAgent(progress_callback=progress_callback)
+            data_room_report = await loop.run_in_executor(
+                None,
+                data_room_agent.process_data_room,
+                files,
+                company_info.company_name
+            )
+            research_jobs[report_id]["progress"] = 55
+        else:
+            research_jobs[report_id]["message"] = "Skipping data room (no files provided)..."
+            research_jobs[report_id]["current_step"] = "data_room_skipped"
         
-        data_room_agent = DataRoomAgent(progress_callback=progress_callback)
-        data_room_report = await loop.run_in_executor(
-            None,
-            data_room_agent.process_data_room,
-            files,
-            company_info.company_name
-        )
-        research_jobs[report_id]["progress"] = 50
-        
-        # Step 3: Risk Scanner (50-70%)
+        # Step 3: Risk Scanner (55-75% or 40-60% if no files)
         research_jobs[report_id]["message"] = "Scanning for risks..."
         research_jobs[report_id]["current_step"] = "risk_scanner"
         
@@ -685,9 +743,9 @@ async def run_complete_analysis_async(
             deep_report,
             data_room_report
         )
-        research_jobs[report_id]["progress"] = 70
+        research_jobs[report_id]["progress"] = 75 if has_files else 70
         
-        # Step 4: IC Memo Drafter (70-95%)
+        # Step 4: IC Memo Drafter (75-95% or 70-95%)
         research_jobs[report_id]["message"] = "Drafting IC memo..."
         research_jobs[report_id]["current_step"] = "ic_memo"
         
@@ -714,7 +772,7 @@ async def run_complete_analysis_async(
         risk_scanner_reports[report_id] = risk_report
         ic_memos[report_id] = ic_memo
         
-        if "excel_file" in data_room_report and data_room_report["excel_file"]:
+        if data_room_report and "excel_file" in data_room_report and data_room_report["excel_file"]:
             excel_files[report_id] = data_room_report["excel_file"]
         
         # Complete
@@ -725,6 +783,7 @@ async def run_complete_analysis_async(
         research_jobs[report_id]["has_ic_memo"] = True
         research_jobs[report_id]["has_risk_report"] = True
         research_jobs[report_id]["has_excel"] = report_id in excel_files
+        research_jobs[report_id]["has_data_room"] = has_files
         
     except Exception as e:
         research_jobs[report_id]["status"] = "failed"
@@ -759,6 +818,416 @@ async def get_full_analysis(report_id: str):
         raise HTTPException(status_code=404, detail="Report not found")
     
     return completed_reports[report_id]
+
+
+# ============================================================================
+# HUMAN-IN-THE-LOOP WORKFLOW ENDPOINTS
+# ============================================================================
+
+@app.post("/api/workflow/start")
+async def start_workflow(
+    prompt: str = Form(...),
+    agent_type: str = Form("openai"),
+    files: List[UploadFile] = File(default=[])
+):
+    """
+    Start a new step-by-step workflow.
+    Returns workflow_id and initiates the first step (Deep Research).
+    """
+    try:
+        # Parse company info
+        company_info = parse_natural_language_prompt(prompt)
+        company_name = company_info.company_name
+        
+        # Generate unique workflow ID
+        workflow_id = f"workflow_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        
+        # Process uploaded files
+        processed_files = []
+        for file in files:
+            filename = file.filename
+            content = await file.read()
+            ext = os.path.splitext(filename)[1].lower()
+            
+            if ext in ['.pdf']:
+                file_type = 'pdf'
+            elif ext in ['.xlsx', '.xls']:
+                file_type = 'excel'
+            elif ext in ['.pptx', '.ppt']:
+                file_type = 'powerpoint'
+            elif ext in ['.docx', '.doc']:
+                file_type = 'docx'
+            else:
+                continue
+            
+            processed_files.append({
+                "filename": filename,
+                "content": content,
+                "file_type": file_type,
+                "size": len(content)
+            })
+        
+        # Create workflow state
+        state = WorkflowState(
+            report_id=workflow_id,
+            company_info=company_info.dict(),
+            files=processed_files,
+            agent_type=agent_type
+        )
+        workflow_states[workflow_id] = state
+        
+        # Initialize job tracking for status polling
+        research_jobs[workflow_id] = {
+            "status": "processing",
+            "message": "Starting deep research...",
+            "progress": 0,
+            "current_step": "deep_research",
+            "company_info": company_info.dict(),
+            "company_name": company_name,
+            "type": "workflow",
+            "created_at": datetime.now().isoformat()
+        }
+        
+        return {
+            "workflow_id": workflow_id,
+            "status": "started",
+            "message": "Workflow started. Connect to SSE endpoint to receive streaming updates.",
+            "company_info": company_info.dict(),
+            "sse_endpoint": f"/api/workflow/{workflow_id}/stream"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+
+
+@app.get("/api/workflow/{workflow_id}/stream")
+async def stream_workflow_step(workflow_id: str):
+    """
+    SSE endpoint to stream the current step's output.
+    Client connects here to receive real-time updates.
+    """
+    if workflow_id not in workflow_states:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    state = workflow_states[workflow_id]
+    
+    async def event_generator():
+        step_name = state.get_current_step_name()
+        
+        # Send initial status
+        yield {
+            "event": "status",
+            "data": json.dumps({
+                "step": step_name,
+                "status": "starting",
+                "message": f"Starting {step_name.replace('_', ' ')}..."
+            })
+        }
+        
+        try:
+            # Run the current step
+            loop = asyncio.get_event_loop()
+            
+            if step_name == "deep_research":
+                output = await run_deep_research_step(state, event_generator_helper)
+            elif step_name == "data_room":
+                output = await run_data_room_step(state, event_generator_helper)
+            elif step_name == "risk_scanner":
+                output = await run_risk_scanner_step(state, event_generator_helper)
+            elif step_name == "ic_memo":
+                output = await run_ic_memo_step(state, event_generator_helper)
+            else:
+                output = None
+            
+            # Store output
+            if output:
+                state.step_outputs[step_name] = output
+                state.step_status[step_name] = "completed"
+                state.awaiting_review = True
+            
+            # Send completion event
+            yield {
+                "event": "step_complete",
+                "data": json.dumps({
+                    "step": step_name,
+                    "status": "completed",
+                    "awaiting_review": True,
+                    "output_preview": str(output)[:500] if output else None
+                })
+            }
+            
+        except Exception as e:
+            yield {
+                "event": "error",
+                "data": json.dumps({
+                    "step": step_name,
+                    "error": str(e)
+                })
+            }
+    
+    return EventSourceResponse(event_generator())
+
+
+async def event_generator_helper(event_type: str, data: Dict):
+    """Helper to yield SSE events from within agent execution"""
+    return {
+        "event": event_type,
+        "data": json.dumps(data)
+    }
+
+
+async def run_deep_research_step(state: WorkflowState, yield_event) -> Dict:
+    """Run deep research agent with streaming updates"""
+    company_info = state.company_info
+    
+    # Update job status
+    research_jobs[state.report_id]["message"] = "Running deep research..."
+    research_jobs[state.report_id]["current_step"] = "deep_research"
+    
+    loop = asyncio.get_event_loop()
+    
+    if state.agent_type == "openai":
+        agent = DeepResearchAgentOpenAI()
+    else:
+        agent = DeepResearchAgent()
+    
+    report = await loop.run_in_executor(
+        None,
+        agent.generate_full_report,
+        company_info["company_name"],
+        company_info["website"],
+        company_info["sector"],
+        company_info["region"],
+        company_info.get("hq_location")
+    )
+    
+    return report
+
+
+async def run_data_room_step(state: WorkflowState, yield_event) -> Dict:
+    """Run data room agent with streaming updates"""
+    research_jobs[state.report_id]["message"] = "Processing data room files..."
+    research_jobs[state.report_id]["current_step"] = "data_room"
+    
+    loop = asyncio.get_event_loop()
+    
+    def progress_callback(step: str, progress: int, message: str):
+        research_jobs[state.report_id]["progress"] = progress
+        research_jobs[state.report_id]["message"] = message
+    
+    agent = DataRoomAgent(progress_callback=progress_callback)
+    report = await loop.run_in_executor(
+        None,
+        agent.process_data_room,
+        state.files,
+        state.company_info["company_name"]
+    )
+    
+    # Store excel file if generated
+    if "excel_file" in report and report["excel_file"]:
+        excel_files[state.report_id] = report["excel_file"]
+    
+    return report
+
+
+async def run_risk_scanner_step(state: WorkflowState, yield_event) -> Dict:
+    """Run risk scanner agent with streaming updates"""
+    research_jobs[state.report_id]["message"] = "Scanning for risks..."
+    research_jobs[state.report_id]["current_step"] = "risk_scanner"
+    
+    loop = asyncio.get_event_loop()
+    
+    def progress_callback(step: str, progress: int, message: str):
+        research_jobs[state.report_id]["progress"] = progress
+        research_jobs[state.report_id]["message"] = message
+    
+    agent = RiskScannerAgent(progress_callback=progress_callback)
+    
+    deep_research = state.step_outputs.get("deep_research", {})
+    data_room = state.step_outputs.get("data_room", {})
+    
+    report = await loop.run_in_executor(
+        None,
+        agent.scan_risks,
+        state.company_info["company_name"],
+        deep_research,
+        data_room
+    )
+    
+    risk_scanner_reports[state.report_id] = report
+    return report
+
+
+async def run_ic_memo_step(state: WorkflowState, yield_event) -> Dict:
+    """Run IC memo drafter agent with streaming updates"""
+    research_jobs[state.report_id]["message"] = "Drafting IC memo..."
+    research_jobs[state.report_id]["current_step"] = "ic_memo"
+    
+    loop = asyncio.get_event_loop()
+    
+    def progress_callback(step: str, progress: int, message: str):
+        research_jobs[state.report_id]["progress"] = progress
+        research_jobs[state.report_id]["message"] = message
+    
+    agent = ICMemoDrafterAgent(progress_callback=progress_callback)
+    
+    deep_research = state.step_outputs.get("deep_research", {})
+    data_room = state.step_outputs.get("data_room", {})
+    risk_scanner = state.step_outputs.get("risk_scanner", {})
+    
+    memo = await loop.run_in_executor(
+        None,
+        agent.draft_memo,
+        state.company_info["company_name"],
+        state.company_info,
+        deep_research,
+        data_room,
+        risk_scanner
+    )
+    
+    ic_memos[state.report_id] = memo
+    return memo
+
+
+@app.get("/api/workflow/{workflow_id}/status")
+async def get_workflow_status(workflow_id: str):
+    """Get the current workflow state"""
+    if workflow_id not in workflow_states:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    state = workflow_states[workflow_id]
+    return state.to_dict()
+
+
+@app.get("/api/workflow/{workflow_id}/output/{step_name}")
+async def get_step_output(workflow_id: str, step_name: str):
+    """Get the output of a specific step"""
+    if workflow_id not in workflow_states:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    state = workflow_states[workflow_id]
+    
+    if step_name not in state.step_outputs:
+        raise HTTPException(status_code=404, detail=f"Output for {step_name} not available")
+    
+    return {
+        "step": step_name,
+        "status": state.step_status.get(step_name, "unknown"),
+        "output": state.step_outputs[step_name]
+    }
+
+
+@app.post("/api/workflow/{workflow_id}/continue")
+async def continue_workflow(workflow_id: str):
+    """
+    User approves current step output and continues to next step.
+    """
+    if workflow_id not in workflow_states:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    state = workflow_states[workflow_id]
+    
+    if not state.awaiting_review:
+        raise HTTPException(status_code=400, detail="Workflow is not awaiting review")
+    
+    # Move to next step
+    state.current_step += 1
+    state.awaiting_review = False
+    
+    current_step = state.get_current_step_name()
+    
+    if current_step == "completed":
+        # Store final outputs
+        completed_reports[workflow_id] = {
+            "deep_research": state.step_outputs.get("deep_research"),
+            "data_room": state.step_outputs.get("data_room"),
+            "risk_scanner": state.step_outputs.get("risk_scanner"),
+            "ic_memo": state.step_outputs.get("ic_memo")
+        }
+        
+        research_jobs[workflow_id]["status"] = "completed"
+        research_jobs[workflow_id]["progress"] = 100
+        research_jobs[workflow_id]["message"] = "Workflow completed!"
+        
+        return {
+            "status": "completed",
+            "message": "All steps completed!",
+            "report_id": workflow_id
+        }
+    
+    return {
+        "status": "continuing",
+        "next_step": current_step,
+        "message": f"Moving to {current_step.replace('_', ' ')}",
+        "sse_endpoint": f"/api/workflow/{workflow_id}/stream"
+    }
+
+
+class RefineRequest(BaseModel):
+    feedback: str
+
+
+@app.post("/api/workflow/{workflow_id}/refine/{step_name}")
+async def refine_step(workflow_id: str, step_name: str, request: RefineRequest):
+    """
+    User provides feedback to refine the current step output.
+    The step will be re-run with the feedback incorporated.
+    """
+    if workflow_id not in workflow_states:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    state = workflow_states[workflow_id]
+    
+    if step_name not in WorkflowState.ALL_STEPS:
+        raise HTTPException(status_code=400, detail=f"Invalid step: {step_name}")
+    
+    # Store feedback for refinement
+    state.step_status[step_name] = "refining"
+    state.awaiting_review = False
+    
+    # Clear previous output so it can be regenerated
+    if step_name in state.step_outputs:
+        del state.step_outputs[step_name]
+    
+    # Update job status
+    research_jobs[workflow_id]["message"] = f"Refining {step_name} with feedback..."
+    research_jobs[workflow_id]["current_step"] = step_name
+    
+    return {
+        "status": "refining",
+        "step": step_name,
+        "feedback_received": request.feedback,
+        "message": f"Refining {step_name}. Connect to SSE endpoint to receive updates.",
+        "sse_endpoint": f"/api/workflow/{workflow_id}/stream"
+    }
+
+
+@app.post("/api/workflow/{workflow_id}/skip/{step_name}")
+async def skip_step(workflow_id: str, step_name: str):
+    """
+    Skip the current step and move to the next one.
+    """
+    if workflow_id not in workflow_states:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    state = workflow_states[workflow_id]
+    
+    if step_name != state.get_current_step_name():
+        raise HTTPException(status_code=400, detail=f"Cannot skip {step_name}, current step is {state.get_current_step_name()}")
+    
+    # Mark as skipped and move on
+    state.step_status[step_name] = "skipped"
+    state.current_step += 1
+    state.awaiting_review = False
+    
+    next_step = state.get_current_step_name()
+    
+    return {
+        "status": "skipped",
+        "skipped_step": step_name,
+        "next_step": next_step,
+        "message": f"Skipped {step_name}, moving to {next_step}"
+    }
 
 
 # ============================================================================

@@ -97,14 +97,14 @@ export default function HeroSection({ onGenerate }: HeroSectionProps) {
                 className={`px-4 py-3 border-2 rounded-xl font-medium transition-all flex items-center gap-2 ${
                   showFileUpload || files.length > 0
                     ? 'border-primary-500 text-primary-500 bg-primary-50'
-                    : 'border-red-400 text-red-600 hover:border-red-500 bg-red-50'
+                    : 'border-gray-300 text-gray-600 hover:border-gray-400'
                 }`}
                 disabled={isGenerating}
-                title="Add data room files (required for IC memo)"
+                title="Add data room files (optional)"
               >
                 <FolderOpen className="w-5 h-5" />
                 <span className="text-sm">
-                  {files.length > 0 ? `${files.length} file${files.length > 1 ? 's' : ''}` : 'Add Files *'}
+                  {files.length > 0 ? `${files.length} file${files.length > 1 ? 's' : ''}` : 'Add Files'}
                 </span>
               </button>
             </div>
@@ -126,11 +126,11 @@ export default function HeroSection({ onGenerate }: HeroSectionProps) {
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
                 <FolderOpen className="w-5 h-5 text-primary-600" />
-                Data Room Files Required
+                Data Room Files (Optional)
               </h3>
               <p className="text-sm text-gray-700">
-                Upload pitch decks, financials, cap tables, and other deal documents. 
-                <strong className="text-primary-700"> Files are required</strong> to generate the complete IC memo.
+                Upload pitch decks, financials, cap tables, and other deal documents for deeper analysis.
+                <span className="text-gray-500"> If no files are provided, the Data Room agent will be skipped.</span>
               </p>
             </div>
             <FileUpload onFilesChange={handleFilesChange} />

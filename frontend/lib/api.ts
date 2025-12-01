@@ -76,9 +76,12 @@ export async function createCompleteAnalysis(
 ): Promise<ResearchResponse> {
   const formData = new FormData();
   
-  files.forEach((file) => {
-    formData.append('files', file);
-  });
+  // Only append files if there are any
+  if (files.length > 0) {
+    files.forEach((file) => {
+      formData.append('files', file);
+    });
+  }
   formData.append('prompt', prompt);
   formData.append('agent_type', agentType);
 
@@ -123,6 +126,159 @@ export async function getFullAnalysis(reportId: string): Promise<any> {
   }
 
   return response.json();
+}
+
+// ============================================================================
+// WORKFLOW API (Human-in-the-Loop)
+// ============================================================================
+
+export async function startWorkflow(
+  prompt: string,
+  files: File[],
+  agentType: string = "openai"
+): Promise<{ workflow_id: string; company_info: any; sse_endpoint: string }> {
+  const formData = new FormData();
+  
+  // Only append files if there are any
+  if (files.length > 0) {
+    files.forEach((file) => {
+      formData.append('files', file);
+    });
+  }
+  formData.append('prompt', prompt);
+  formData.append('agent_type', agentType);
+
+  const response = await fetch(`${API_BASE_URL}/api/workflow/start`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to start workflow");
+  }
+
+  return response.json();
+}
+
+export async function getWorkflowStatus(workflowId: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/workflow/${workflowId}/status`);
+
+  if (!response.ok) {
+    throw new Error("Failed to get workflow status");
+  }
+
+  return response.json();
+}
+
+export async function getStepOutput(workflowId: string, stepName: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/workflow/${workflowId}/output/${stepName}`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to get output for ${stepName}`);
+  }
+
+  return response.json();
+}
+
+export async function continueWorkflow(workflowId: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/workflow/${workflowId}/continue`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to continue workflow");
+  }
+
+  return response.json();
+}
+
+export async function refineStep(workflowId: string, stepName: string, feedback: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/workflow/${workflowId}/refine/${stepName}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ feedback }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to refine step");
+  }
+
+  return response.json();
+}
+
+export async function skipStep(workflowId: string, stepName: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/workflow/${workflowId}/skip/${stepName}`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to skip step");
+  }
+
+  return response.json();
+}
+
+export function createSSEConnection(
+  workflowId: string,
+  onMessage: (event: string, data: any) => void,
+  onError: (error: any) => void
+): EventSource {
+  const eventSource = new EventSource(`${API_BASE_URL}/api/workflow/${workflowId}/stream`);
+  
+  eventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage("message", data);
+    } catch (e) {
+      console.error("Failed to parse SSE message:", e);
+    }
+  };
+  
+  eventSource.addEventListener("status", (event: any) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage("status", data);
+    } catch (e) {
+      console.error("Failed to parse status event:", e);
+    }
+  });
+  
+  eventSource.addEventListener("step_complete", (event: any) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage("step_complete", data);
+    } catch (e) {
+      console.error("Failed to parse step_complete event:", e);
+    }
+  });
+  
+  eventSource.addEventListener("chunk", (event: any) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage("chunk", data);
+    } catch (e) {
+      console.error("Failed to parse chunk event:", e);
+    }
+  });
+  
+  eventSource.addEventListener("error", (event: any) => {
+    try {
+      const data = JSON.parse(event.data);
+      onMessage("error", data);
+    } catch (e) {
+      onError(event);
+    }
+  });
+  
+  eventSource.onerror = onError;
+  
+  return eventSource;
 }
 
 export async function downloadReport(reportId: string, companyName: string) {
