@@ -1,4 +1,4 @@
-# Deal Co-Pilot
+# Deal Co-Pilot (small change)
 
 A modern **full-stack SaaS application** for AI-powered investment due diligence research.
 
