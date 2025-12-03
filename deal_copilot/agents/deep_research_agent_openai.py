@@ -22,10 +22,17 @@ class DeepResearchAgentOpenAI:
     so it handles both retrieval and generation in a single API call.
     """
     
-    def __init__(self):
-        """Initialize the Deep Research Agent with OpenAI"""
+    def __init__(self, stream_callback=None):
+        """
+        Initialize the Deep Research Agent with OpenAI
+        
+        Args:
+            stream_callback: Optional function to call with streaming content chunks
+                            Signature: callback(chunk: str)
+        """
         self.client = OpenAI(api_key=config.OPENAI_API_KEY)
         self.model = config.OPENAI_MODEL
+        self.stream_callback = stream_callback
     
     def generate_market_overview(self, company_name: str, sector: str, region: str) -> Dict:
         """
@@ -81,23 +88,49 @@ FORMATTING INSTRUCTIONS - VERY IMPORTANT:
 Search the web thoroughly and provide a detailed, data-driven analysis."""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert investment analyst with deep knowledge of market research and due diligence. You have access to web search to find current, factual information."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                max_completion_tokens=config.MAX_TOKENS  # Updated for GPT-4o and newer models
-                # Note: temperature removed - GPT-5 only supports default value of 1
-            )
-            
-            content = response.choices[0].message.content
+            # Use streaming if callback provided
+            if self.stream_callback:
+                content_parts = []
+                stream = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert investment analyst with deep knowledge of market research and due diligence. You have access to web search to find current, factual information."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    max_completion_tokens=config.MAX_TOKENS,
+                    stream=True
+                )
+                
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        chunk_content = chunk.choices[0].delta.content
+                        content_parts.append(chunk_content)
+                        if self.stream_callback:
+                            self.stream_callback(chunk_content)
+                
+                content = "".join(content_parts)
+            else:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert investment analyst with deep knowledge of market research and due diligence. You have access to web search to find current, factual information."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    max_completion_tokens=config.MAX_TOKENS
+                )
+                content = response.choices[0].message.content
             
             return {
                 "section": "Market Overview",
@@ -179,23 +212,49 @@ FORMATTING INSTRUCTIONS - VERY IMPORTANT:
 Search the web thoroughly and provide detailed competitive intelligence."""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert investment analyst specializing in competitive analysis and market intelligence. Use web search to find current, factual information."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                max_completion_tokens=config.MAX_TOKENS  # Updated for GPT-4o and newer models
-                # Note: temperature removed - GPT-5 only supports default value of 1
-            )
-            
-            content = response.choices[0].message.content
+            # Use streaming if callback provided
+            if self.stream_callback:
+                content_parts = []
+                stream = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert investment analyst specializing in competitive analysis and market intelligence. Use web search to find current, factual information."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    max_completion_tokens=config.MAX_TOKENS,
+                    stream=True
+                )
+                
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        chunk_content = chunk.choices[0].delta.content
+                        content_parts.append(chunk_content)
+                        if self.stream_callback:
+                            self.stream_callback(chunk_content)
+                
+                content = "".join(content_parts)
+            else:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert investment analyst specializing in competitive analysis and market intelligence. Use web search to find current, factual information."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    max_completion_tokens=config.MAX_TOKENS
+                )
+                content = response.choices[0].message.content
             
             return {
                 "section": "Competitor Overview",
@@ -281,23 +340,49 @@ FORMATTING INSTRUCTIONS - VERY IMPORTANT:
 Search the web thoroughly and provide comprehensive company intelligence."""
 
         try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are an expert investment analyst conducting company due diligence. Use web search to find current, factual information about the company, team, and recent news."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                max_completion_tokens=config.MAX_TOKENS  # Updated for GPT-4o and newer models
-                # Note: temperature removed - GPT-5 only supports default value of 1
-            )
-            
-            content = response.choices[0].message.content
+            # Use streaming if callback provided
+            if self.stream_callback:
+                content_parts = []
+                stream = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert investment analyst conducting company due diligence. Use web search to find current, factual information about the company, team, and recent news."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    max_completion_tokens=config.MAX_TOKENS,
+                    stream=True
+                )
+                
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        chunk_content = chunk.choices[0].delta.content
+                        content_parts.append(chunk_content)
+                        if self.stream_callback:
+                            self.stream_callback(chunk_content)
+                
+                content = "".join(content_parts)
+            else:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": "You are an expert investment analyst conducting company due diligence. Use web search to find current, factual information about the company, team, and recent news."
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    max_completion_tokens=config.MAX_TOKENS
+                )
+                content = response.choices[0].message.content
             
             return {
                 "section": "Company/Team Overview and Newsrun",

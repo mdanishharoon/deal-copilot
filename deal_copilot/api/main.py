@@ -925,17 +925,51 @@ async def stream_workflow_step(workflow_id: str):
         }
         
         try:
-            # Run the current step
+            # Run the current step with streaming for all agents
             loop = asyncio.get_event_loop()
+            stream_queue = asyncio.Queue()
             
+            # Create streaming task for current step
             if step_name == "deep_research":
-                output = await run_deep_research_step(state, event_generator_helper)
+                output_task = asyncio.create_task(
+                    run_deep_research_step_streaming(state, stream_queue, loop)
+                )
             elif step_name == "data_room":
-                output = await run_data_room_step(state, event_generator_helper)
+                output_task = asyncio.create_task(
+                    run_data_room_step_streaming(state, stream_queue, loop)
+                )
             elif step_name == "risk_scanner":
-                output = await run_risk_scanner_step(state, event_generator_helper)
+                output_task = asyncio.create_task(
+                    run_risk_scanner_step_streaming(state, stream_queue, loop)
+                )
             elif step_name == "ic_memo":
-                output = await run_ic_memo_step(state, event_generator_helper)
+                output_task = asyncio.create_task(
+                    run_ic_memo_step_streaming(state, stream_queue, loop)
+                )
+            else:
+                output_task = None
+            
+            # Yield chunks as they arrive (for all streaming steps)
+            if output_task:
+                while True:
+                    try:
+                        chunk = await asyncio.wait_for(stream_queue.get(), timeout=0.1)
+                        if chunk is None:  # Sentinel value indicating completion
+                            break
+                        yield {
+                            "event": "chunk",
+                            "data": json.dumps({
+                                "content": chunk
+                            })
+                        }
+                    except asyncio.TimeoutError:
+                        # Check if task is done
+                        if output_task.done():
+                            break
+                        continue
+                
+                # Get final output
+                output = await output_task
             else:
                 output = None
             
@@ -977,7 +1011,7 @@ async def event_generator_helper(event_type: str, data: Dict):
 
 
 async def run_deep_research_step(state: WorkflowState, yield_event) -> Dict:
-    """Run deep research agent with streaming updates"""
+    """Run deep research agent (non-streaming version)"""
     company_info = state.company_info
     
     # Update job status
@@ -1004,8 +1038,41 @@ async def run_deep_research_step(state: WorkflowState, yield_event) -> Dict:
     return report
 
 
+async def run_deep_research_step_streaming(state: WorkflowState, stream_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop) -> Dict:
+    """Run deep research agent with streaming support"""
+    company_info = state.company_info
+    
+    # Update job status
+    research_jobs[state.report_id]["message"] = "Running deep research..."
+    research_jobs[state.report_id]["current_step"] = "deep_research"
+    
+    def stream_callback(chunk: str):
+        """Put streaming chunk in queue from synchronous context"""
+        asyncio.run_coroutine_threadsafe(stream_queue.put(chunk), loop)
+    
+    if state.agent_type == "openai":
+        agent = DeepResearchAgentOpenAI(stream_callback=stream_callback)
+    else:
+        agent = DeepResearchAgent()  # Gemini version doesn't support streaming yet
+    
+    report = await loop.run_in_executor(
+        None,
+        agent.generate_full_report,
+        company_info["company_name"],
+        company_info["website"],
+        company_info["sector"],
+        company_info["region"],
+        company_info.get("hq_location")
+    )
+    
+    # Signal completion
+    await stream_queue.put(None)
+    
+    return report
+
+
 async def run_data_room_step(state: WorkflowState, yield_event) -> Dict:
-    """Run data room agent with streaming updates"""
+    """Run data room agent (non-streaming version)"""
     research_jobs[state.report_id]["message"] = "Processing data room files..."
     research_jobs[state.report_id]["current_step"] = "data_room"
     
@@ -1030,8 +1097,43 @@ async def run_data_room_step(state: WorkflowState, yield_event) -> Dict:
     return report
 
 
+async def run_data_room_step_streaming(state: WorkflowState, stream_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop) -> Dict:
+    """Run data room agent with streaming support"""
+    research_jobs[state.report_id]["message"] = "Processing data room files..."
+    research_jobs[state.report_id]["current_step"] = "data_room"
+    
+    def progress_callback(step: str, progress: int, message: str):
+        research_jobs[state.report_id]["progress"] = progress
+        research_jobs[state.report_id]["message"] = message
+    
+    def stream_callback(chunk: str):
+        """Put streaming chunk in queue from synchronous context"""
+        asyncio.run_coroutine_threadsafe(stream_queue.put(chunk), loop)
+    
+    agent = DataRoomAgent(
+        progress_callback=progress_callback,
+        stream_callback=stream_callback
+    )
+    
+    report = await loop.run_in_executor(
+        None,
+        agent.process_data_room,
+        state.files,
+        state.company_info["company_name"]
+    )
+    
+    # Signal completion
+    await stream_queue.put(None)
+    
+    # Store excel file if generated
+    if "excel_file" in report and report["excel_file"]:
+        excel_files[state.report_id] = report["excel_file"]
+    
+    return report
+
+
 async def run_risk_scanner_step(state: WorkflowState, yield_event) -> Dict:
-    """Run risk scanner agent with streaming updates"""
+    """Run risk scanner agent (non-streaming version)"""
     research_jobs[state.report_id]["message"] = "Scanning for risks..."
     research_jobs[state.report_id]["current_step"] = "risk_scanner"
     
@@ -1053,6 +1155,42 @@ async def run_risk_scanner_step(state: WorkflowState, yield_event) -> Dict:
         deep_research,
         data_room
     )
+    
+    risk_scanner_reports[state.report_id] = report
+    return report
+
+
+async def run_risk_scanner_step_streaming(state: WorkflowState, stream_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop) -> Dict:
+    """Run risk scanner agent with streaming support"""
+    research_jobs[state.report_id]["message"] = "Scanning for risks..."
+    research_jobs[state.report_id]["current_step"] = "risk_scanner"
+    
+    def progress_callback(step: str, progress: int, message: str):
+        research_jobs[state.report_id]["progress"] = progress
+        research_jobs[state.report_id]["message"] = message
+    
+    def stream_callback(chunk: str):
+        """Put streaming chunk in queue from synchronous context"""
+        asyncio.run_coroutine_threadsafe(stream_queue.put(chunk), loop)
+    
+    agent = RiskScannerAgent(
+        progress_callback=progress_callback,
+        stream_callback=stream_callback
+    )
+    
+    deep_research = state.step_outputs.get("deep_research", {})
+    data_room = state.step_outputs.get("data_room", {})
+    
+    report = await loop.run_in_executor(
+        None,
+        agent.scan_risks,
+        state.company_info["company_name"],
+        deep_research,
+        data_room
+    )
+    
+    # Signal completion
+    await stream_queue.put(None)
     
     risk_scanner_reports[state.report_id] = report
     return report
@@ -1084,6 +1222,46 @@ async def run_ic_memo_step(state: WorkflowState, yield_event) -> Dict:
         data_room,
         risk_scanner
     )
+    
+    ic_memos[state.report_id] = memo
+    return memo
+
+
+async def run_ic_memo_step_streaming(state: WorkflowState, stream_queue: asyncio.Queue, loop: asyncio.AbstractEventLoop) -> Dict:
+    """Run IC memo drafter agent with streaming support"""
+    research_jobs[state.report_id]["message"] = "Drafting IC memo..."
+    research_jobs[state.report_id]["current_step"] = "ic_memo"
+    
+    def progress_callback(step: str, progress: int, message: str):
+        research_jobs[state.report_id]["progress"] = progress
+        research_jobs[state.report_id]["message"] = message
+    
+    def stream_callback(chunk: str):
+        """Put streaming chunk in queue from synchronous context"""
+        asyncio.run_coroutine_threadsafe(stream_queue.put(chunk), loop)
+    
+    agent = ICMemoDrafterAgent(
+        progress_callback=progress_callback,
+        stream_callback=stream_callback
+    )
+    
+    deep_research = state.step_outputs.get("deep_research", {})
+    data_room = state.step_outputs.get("data_room", {})
+    risk_scanner = state.step_outputs.get("risk_scanner", {})
+    
+    # Run in executor (synchronous but with streaming callback)
+    memo = await loop.run_in_executor(
+        None,
+        agent.draft_memo,
+        state.company_info["company_name"],
+        state.company_info,
+        deep_research,
+        data_room,
+        risk_scanner
+    )
+    
+    # Signal completion
+    await stream_queue.put(None)
     
     ic_memos[state.report_id] = memo
     return memo

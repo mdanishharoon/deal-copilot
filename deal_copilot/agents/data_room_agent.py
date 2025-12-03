@@ -48,15 +48,18 @@ class DataRoomAgent:
     CRITICAL: NO HALLUCINATIONS - If data doesn't exist, mark as N/A
     """
     
-    def __init__(self, progress_callback=None):
+    def __init__(self, progress_callback=None, stream_callback=None):
         """
         Initialize the Data Room Agent with OpenAI
         
         Args:
             progress_callback: Optional function to call with progress updates
                                Signature: callback(step: str, progress: int, message: str)
+            stream_callback: Optional function to call with streaming content chunks
+                            Signature: callback(chunk: str)
         """
         self.progress_callback = progress_callback
+        self.stream_callback = stream_callback
         
         # Initialize OpenAI client
         self.client = OpenAI(api_key=config.OPENAI_API_KEY)
@@ -498,20 +501,41 @@ Include citations in format: [Source: filename, page X]"""
 
         self._update_progress("qualitative", 35, f"Sending {len(context):,} chars to OpenAI...")
         
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            max_completion_tokens=8000  # Updated for GPT-4o and newer models
-            # Note: temperature removed - GPT-5 only supports default value of 1
-        )
-        
-        if not response or not response.choices or not response.choices[0].message.content:
-            raise ValueError("OpenAI returned empty response for qualitative analysis. This may be due to content filters or API issues.")
-        
-        content = response.choices[0].message.content
+        # Use streaming if callback provided
+        if self.stream_callback:
+            content_parts = []
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_completion_tokens=8000,
+                stream=True
+            )
+            
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    chunk_content = chunk.choices[0].delta.content
+                    content_parts.append(chunk_content)
+                    if self.stream_callback:
+                        self.stream_callback(chunk_content)
+            
+            content = "".join(content_parts)
+        else:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_completion_tokens=8000
+            )
+            
+            if not response or not response.choices or not response.choices[0].message.content:
+                raise ValueError("OpenAI returned empty response for qualitative analysis. This may be due to content filters or API issues.")
+            
+            content = response.choices[0].message.content
         
         self._update_progress("qualitative", 50, f"Received {len(content):,} chars from OpenAI")
         
@@ -651,21 +675,42 @@ Begin extraction:"""
 
         self._update_progress("quantitative", 65, f"Sending {len(context):,} chars to OpenAI...")
         
-        # Use higher token limit for quantitative data (large tables)
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            max_completion_tokens=16000  # Higher limit for large tables (updated for GPT-4o+)
-            # Note: temperature removed - GPT-5 only supports default value of 1
-        )
-        
-        if not response or not response.choices or not response.choices[0].message.content:
-            raise ValueError("OpenAI returned empty response for quantitative data. This may be due to content filters or API issues.")
-        
-        content = response.choices[0].message.content
+        # Use streaming if callback provided
+        if self.stream_callback:
+            content_parts = []
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_completion_tokens=16000,
+                stream=True
+            )
+            
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    chunk_content = chunk.choices[0].delta.content
+                    content_parts.append(chunk_content)
+                    if self.stream_callback:
+                        self.stream_callback(chunk_content)
+            
+            content = "".join(content_parts)
+        else:
+            # Use higher token limit for quantitative data (large tables)
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_completion_tokens=16000
+            )
+            
+            if not response or not response.choices or not response.choices[0].message.content:
+                raise ValueError("OpenAI returned empty response for quantitative data. This may be due to content filters or API issues.")
+            
+            content = response.choices[0].message.content
         
         self._update_progress("quantitative", 75, f"Received {len(content):,} chars from OpenAI")
         

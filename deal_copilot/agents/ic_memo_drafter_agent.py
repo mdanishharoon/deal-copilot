@@ -27,14 +27,17 @@ class ICMemoDrafterAgent:
     - Recommendations and next steps
     """
     
-    def __init__(self, progress_callback=None):
+    def __init__(self, progress_callback=None, stream_callback=None):
         """
         Initialize the IC Memo Drafter Agent with OpenAI
         
         Args:
             progress_callback: Optional function to call with progress updates
+            stream_callback: Optional function to call with streaming content chunks
+                            Signature: callback(chunk: str)
         """
         self.progress_callback = progress_callback
+        self.stream_callback = stream_callback
         self.client = OpenAI(api_key=config.OPENAI_API_KEY)
         self.model = config.OPENAI_MODEL
     
@@ -289,16 +292,39 @@ Generate a comprehensive, professional IC memo now."""
 
         self._update_progress("ic_memo", 40, f"Sending {len(context):,} chars to OpenAI for memo drafting...")
         
-        response = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            max_completion_tokens=16000  # Large limit for comprehensive memo
-        )
-        
-        content = response.choices[0].message.content
+        # Use streaming if callback provided
+        if self.stream_callback:
+            content_parts = []
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_completion_tokens=16000,
+                stream=True
+            )
+            
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    chunk_content = chunk.choices[0].delta.content
+                    content_parts.append(chunk_content)
+                    # Call stream callback for each chunk
+                    if self.stream_callback:
+                        self.stream_callback(chunk_content)
+            
+            content = "".join(content_parts)
+        else:
+            # Non-streaming fallback
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                max_completion_tokens=16000
+            )
+            content = response.choices[0].message.content
         
         self._update_progress("ic_memo", 85, f"Received {len(content):,} chars from OpenAI")
         
