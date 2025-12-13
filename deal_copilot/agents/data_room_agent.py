@@ -122,7 +122,16 @@ class DataRoomAgent:
             quantitative_data,
             company_name
         )
-        self._update_progress("excel", 95, "Excel file generated")
+        self._update_progress("excel", 90, "Excel file generated")
+        
+        # Step 5: Generate human-readable summary for frontend
+        self._update_progress("summary", 92, "Generating human-readable summary...")
+        human_readable_summary = self._generate_human_readable_summary(
+            company_name,
+            qualitative_analysis,
+            quantitative_data
+        )
+        self._update_progress("summary", 95, "Summary generated")
         
         # Generate summary
         extraction_summary = extracted_content.get("extraction_summary", {})
@@ -151,6 +160,7 @@ class DataRoomAgent:
             "extraction_summary": summary,
             "qualitative_analysis": qualitative_analysis,
             "quantitative_data": quantitative_data,
+            "human_readable_summary": human_readable_summary,  # For frontend display
             "excel_file": excel_file  # BytesIO object with Excel file
         }
     
@@ -981,6 +991,114 @@ Begin extraction:"""
             col_letter = chr(64 + col_idx)  # A, B, C, etc.
             ws.column_dimensions[col_letter].width = 18
     
+    def _generate_human_readable_summary(
+        self,
+        company_name: str,
+        qualitative_analysis: Dict,
+        quantitative_data: Dict
+    ) -> Dict:
+        """Generate a human-readable summary for frontend display"""
+        
+        system_prompt = """You are an expert investment analyst creating executive summaries of data room analysis.
+
+Your role is to synthesize qualitative insights and quantitative metrics into a clear, readable summary for investors.
+
+CRITICAL REQUIREMENTS:
+1. Write in clear, professional prose (not bullet points or structured format)
+2. Highlight the most important insights and metrics
+3. Include specific numbers and KPIs where available
+4. Cite sources (e.g., "per pitch deck", "from financials.xlsx")
+5. Be balanced - note both strengths and concerns
+6. Focus on investment-relevant information"""
+
+        user_prompt = f"""Create a comprehensive Data Room Summary for {company_name}.
+
+QUALITATIVE INSIGHTS:
+{qualitative_analysis.get('content', 'N/A')}
+
+QUANTITATIVE DATA:
+{quantitative_data.get('content', 'N/A')}
+
+Generate a professional summary with these sections:
+
+**Executive Overview**
+2-3 paragraphs summarizing the company, product, team, and key traction metrics. Include specific numbers.
+
+**Key Metrics & Financials**
+Highlight the most important metrics found in the data room:
+- Revenue metrics (ARR, MRR, growth rates)
+- Customer metrics (count, CAC, LTV, churn)
+- Unit economics (margins, payback period)
+- Runway and burn rate
+- Any other material KPIs
+
+**Deal Structure** (if available)
+- Current investors and ownership
+- Round details (size, valuation, terms)
+- Use of funds
+- Cap table notes
+
+**Strengths Identified**
+Top 3-5 positive signals from the data room with evidence.
+
+**Concerns & Gaps**
+Top 3-5 concerns, inconsistencies, or missing information that require follow-up.
+
+**Data Quality Assessment**
+Comment on the completeness and quality of the data room materials.
+
+FORMAT: Write as flowing prose with clear section headers. Include specific numbers with citations. Be concise but comprehensive (aim for 800-1200 words)."""
+
+        try:
+            # Use streaming if callback provided
+            if self.stream_callback:
+                content_parts = []
+                stream = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_completion_tokens=4000,
+                    stream=True
+                )
+                
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        chunk_content = chunk.choices[0].delta.content
+                        content_parts.append(chunk_content)
+                        if self.stream_callback:
+                            self.stream_callback(chunk_content)
+                
+                content = "".join(content_parts)
+            else:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    max_completion_tokens=4000
+                )
+                content = response.choices[0].message.content
+            
+            return {
+                "content": content,
+                "generated_at": datetime.now().isoformat(),
+                "word_count": len(content.split())
+            }
+        except Exception as e:
+            print(f"⚠️  Error generating human-readable summary: {e}")
+            # Fallback to basic summary
+            return {
+                "content": f"# Data Room Summary for {company_name}\n\n" +
+                          f"**Files Processed:** {len(qualitative_analysis.get('content', ''))} chars qualitative, " +
+                          f"{len(quantitative_data.get('content', ''))} chars quantitative\n\n" +
+                          f"Error generating detailed summary: {str(e)}",
+                "generated_at": datetime.now().isoformat(),
+                "word_count": 50
+            }
+    
     def format_report_as_text(self, report: Dict) -> str:
         """Format the data room report as readable text"""
         output = []
@@ -993,17 +1111,77 @@ Begin extraction:"""
         output.append(f"Generated: {report['generated_at']}")
         output.append("\n" + "=" * 80 + "\n")
         
+        # Human-readable summary (if available)
+        if "human_readable_summary" in report:
+            output.append("\n## EXECUTIVE SUMMARY\n")
+            output.append(report['human_readable_summary']['content'])
+            output.append("\n" + "-" * 80 + "\n")
+        
         # Qualitative Analysis
-        output.append("\n## QUALITATIVE ANALYSIS\n")
+        output.append("\n## QUALITATIVE ANALYSIS (Detailed)\n")
         output.append(report['qualitative_analysis']['content'])
         output.append("\n" + "-" * 80 + "\n")
         
         # Quantitative Data
-        output.append("\n## QUANTITATIVE DATA\n")
+        output.append("\n## QUANTITATIVE DATA (Structured)\n")
         output.append(report['quantitative_data']['content'])
         output.append("\n" + "-" * 80 + "\n")
         
         return "\n".join(output)
+    
+    def generate_docx_summary(self, report: Dict) -> BytesIO:
+        """Generate a DOCX file with the human-readable summary"""
+        try:
+            if not Document:
+                raise ImportError("python-docx not available")
+            
+            doc = Document()
+            
+            # Title
+            title = doc.add_heading(f"Data Room Analysis: {report['company_name']}", 0)
+            title.alignment = 1  # Center alignment
+            
+            # Metadata
+            doc.add_paragraph(f"Generated: {report.get('generated_at', 'N/A')}")
+            doc.add_paragraph(f"Files Processed: {report.get('files_processed', 'N/A')}")
+            doc.add_paragraph("")  # Empty line
+            
+            # Human-readable summary content
+            if "human_readable_summary" in report:
+                content = report["human_readable_summary"].get("content", "")
+                
+                # Parse content and add to document
+                # Split by lines and add as paragraphs
+                for line in content.split("\n"):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    # Check if it's a heading (starts with ## or **)
+                    if line.startswith("**") and line.endswith("**"):
+                        # Bold heading
+                        heading_text = line.strip("*")
+                        doc.add_heading(heading_text, level=2)
+                    elif line.startswith("#"):
+                        # Markdown heading
+                        heading_text = line.lstrip("#").strip()
+                        doc.add_heading(heading_text, level=2)
+                    else:
+                        # Regular paragraph
+                        doc.add_paragraph(line)
+            else:
+                doc.add_paragraph("Summary not available.")
+            
+            # Save to BytesIO
+            docx_buffer = BytesIO()
+            doc.save(docx_buffer)
+            docx_buffer.seek(0)
+            
+            return docx_buffer
+            
+        except Exception as e:
+            print(f"⚠️  Error generating DOCX: {e}")
+            return None
 
 
 

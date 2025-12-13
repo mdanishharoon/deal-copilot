@@ -67,6 +67,12 @@ export default function ResultsSection({
     }
   };
 
+  const handleDownloadDataRoomSummary = () => {
+    if (reportId) {
+      window.open(`http://localhost:8000/api/dataroom/${reportId}/summary-docx`, '_blank');
+    }
+  };
+
   return (
     <div className="animate-fade-in space-y-8">
       {/* Header with Company Info */}
@@ -103,7 +109,7 @@ export default function ResultsSection({
       {/* Download Buttons */}
       <div className="card">
         <h3 className="text-lg font-semibold mb-4 text-gray-900">Download Reports</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <button
             onClick={handleDownloadICMemo}
             className="flex items-center gap-3 px-4 py-3 bg-gradient-primary text-white rounded-lg
@@ -132,12 +138,21 @@ export default function ResultsSection({
           </button>
 
           <button
+            onClick={handleDownloadDataRoomSummary}
+            className="flex items-center gap-3 px-4 py-3 bg-purple-500 text-white rounded-lg
+                     hover:shadow-lg hover:bg-purple-600 transition-all duration-200"
+          >
+            <FileText className="w-5 h-5" />
+            <span className="font-medium">Data Room Summary (DOCX)</span>
+          </button>
+
+          <button
             onClick={handleDownloadExcel}
             className="flex items-center gap-3 px-4 py-3 bg-green-500 text-white rounded-lg
                      hover:shadow-lg hover:bg-green-600 transition-all duration-200"
           >
             <FileSpreadsheet className="w-5 h-5" />
-            <span className="font-medium">Data Room (Excel)</span>
+            <span className="font-medium">Financial Data (Excel)</span>
           </button>
         </div>
       </div>

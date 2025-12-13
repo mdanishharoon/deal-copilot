@@ -586,6 +586,45 @@ async def download_excel(report_id: str):
     )
 
 
+@app.get("/api/dataroom/{report_id}/summary-docx")
+async def download_dataroom_summary_docx(report_id: str):
+    """
+    Download the human-readable data room summary as DOCX
+    """
+    # Get the full report
+    report = None
+    if report_id in completed_reports and "data_room" in completed_reports[report_id]:
+        report = completed_reports[report_id]["data_room"]
+    elif report_id in research_jobs and "report" in research_jobs[report_id]:
+        job_report = research_jobs[report_id]["report"]
+        if isinstance(job_report, dict) and "data_room" in job_report:
+            report = job_report["data_room"]
+    
+    if not report or "human_readable_summary" not in report:
+        raise HTTPException(status_code=404, detail="Data room summary not found for this report")
+    
+    # Generate DOCX
+    from deal_copilot.agents.data_room_agent import DataRoomAgent
+    agent = DataRoomAgent()
+    docx_buffer = agent.generate_docx_summary(report)
+    
+    if not docx_buffer:
+        raise HTTPException(status_code=500, detail="Failed to generate DOCX file")
+    
+    # Get company name for filename
+    company_name = report.get("company_name", "Company")
+    safe_name = "".join(c for c in company_name if c.isalnum() or c in (' ', '-', '_')).strip()
+    filename = f"{safe_name}_Data_Room_Summary.docx"
+    
+    return StreamingResponse(
+        docx_buffer,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
 # ============================================================================
 # COMPLETE ANALYSIS ENDPOINTS (All Agents)
 # ============================================================================
