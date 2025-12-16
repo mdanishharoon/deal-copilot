@@ -192,7 +192,8 @@ export default function Home() {
         }
       },
       (error) => {
-        console.error("SSE Error:", error);
+        // Only show error if it's actually a problem (not normal closure)
+        console.warn("SSE connection closed or errored");
         setIsProcessingStep(false);
       }
     );
