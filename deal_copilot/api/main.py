@@ -93,25 +93,37 @@ class WorkflowState:
     """Track the state of a step-by-step analysis workflow"""
     ALL_STEPS = ["deep_research", "data_room", "risk_scanner", "ic_memo"]
     
-    def __init__(self, report_id: str, company_info: Dict, files: List[Dict], agent_type: str):
+    def __init__(self, report_id: str, company_info: Dict, files: List[Dict], agent_type: str, 
+                 run_deep_research: bool = True, run_data_room: bool = True):
         self.report_id = report_id
         self.company_info = company_info
         self.files = files
         self.agent_type = agent_type
         self.has_files = len(files) > 0
+        self.run_deep_research = run_deep_research
+        self.run_data_room = run_data_room and self.has_files
         
-        # Skip data_room if no files provided
-        if self.has_files:
-            self.steps = self.ALL_STEPS.copy()
-        else:
-            self.steps = ["deep_research", "risk_scanner", "ic_memo"]
+        # Build steps based on selected agents
+        self.steps = []
+        if self.run_deep_research:
+            self.steps.append("deep_research")
+        if self.run_data_room:
+            self.steps.append("data_room")
+        self.steps.append("risk_scanner")
+        self.steps.append("ic_memo")
         
         self.current_step = 0  # Index into steps
         self.step_status = {step: "pending" for step in self.ALL_STEPS}
-        if not self.has_files:
+        
+        # Mark skipped steps
+        if not self.run_deep_research:
+            self.step_status["deep_research"] = "skipped"
+        if not self.run_data_room:
             self.step_status["data_room"] = "skipped"
+            
         self.step_outputs = {}  # {step_name: output}
         self.awaiting_review = False
+        self.cancelled = False  # Track if workflow was cancelled
         self.created_at = datetime.now().isoformat()
     
     def get_current_step_name(self) -> str:
@@ -129,6 +141,7 @@ class WorkflowState:
             "steps": self.steps,
             "has_files": self.has_files,
             "step_status": self.step_status,
+            "cancelled": self.cancelled,
             "awaiting_review": self.awaiting_review,
             "created_at": self.created_at,
             "has_outputs": {step: step in self.step_outputs for step in self.ALL_STEPS}
@@ -141,70 +154,85 @@ class WorkflowState:
 
 def parse_natural_language_prompt(prompt: str) -> CompanyInfo:
     """
-    Parse natural language prompt to extract company information
+    Parse natural language prompt using LLM to extract company information intelligently
     
     Examples:
     - "Analyze Bizzi, a SaaS company in Vietnam at https://bizzi.vn/en/"
     - "Research Grab, a marketplace in Southeast Asia, website: https://grab.com"
-    - "Do due diligence on Shopee / E-commerce / Singapore / https://shopee.sg"
+    - "Re.K, HK-based stablecoin company"
     """
-    # Simple parsing - in production, use LLM for better extraction
-    lines = prompt.lower().replace(",", "\n").split("\n")
+    from openai import OpenAI
+    from deal_copilot.config import config_openai
+    import json
     
-    info = {
-        "company_name": "",
-        "website": "",
-        "sector": "",
-        "region": "",
-        "hq_location": None
-    }
+    client = OpenAI(api_key=config_openai.OPENAI_API_KEY)
     
-    # Extract company name (usually first word/phrase)
-    first_line = lines[0].strip()
-    for keyword in ["analyze", "research", "due diligence on", "investigate", "study"]:
-        if keyword in first_line:
-            first_line = first_line.replace(keyword, "").strip()
+    extraction_prompt = f"""Extract company information from this user prompt and return ONLY a JSON object with these exact fields:
+{{
+  "company_name": "exact company name",
+  "website": "full URL if mentioned, otherwise empty string",
+  "sector": "specific industry/sector (e.g., 'Fintech', 'Stablecoin', 'E-commerce', 'SaaS', 'Healthcare', 'PropTech')",
+  "region": "geographic market (e.g., 'Hong Kong', 'Singapore', 'Southeast Asia', 'United States', 'Vietnam')",
+  "hq_location": "headquarters location if mentioned, otherwise null"
+}}
+
+User prompt: "{prompt}"
+
+Rules:
+- Be SPECIFIC with sector (e.g., "Stablecoin" or "Fintech" not just "Technology")
+- Be SPECIFIC with region (e.g., "Hong Kong" not just "Asia")
+- Recognize abbreviations (HK = Hong Kong, SG = Singapore, SEA = Southeast Asia, US = United States)
+- If website not found, return empty string (don't make one up)
+- Return ONLY the JSON object, no other text
+"""
     
-    words = first_line.split()
-    if words:
-        info["company_name"] = words[0].capitalize()
-    
-    # Extract website
-    for line in lines:
-        if "http" in line or "www" in line:
-            parts = line.split()
-            for part in parts:
-                if "http" in part or "www" in part:
-                    info["website"] = part.strip()
-                    break
-    
-    # Extract sector
-    sectors = ["saas", "fintech", "marketplace", "healthtech", "edtech", "e-commerce", "ecommerce"]
-    for line in lines:
-        for sector in sectors:
-            if sector in line:
-                info["sector"] = sector.upper() if sector == "saas" else sector.capitalize()
-                break
-    
-    # Extract region
-    regions = ["vietnam", "singapore", "southeast asia", "sea", "indonesia", "thailand", "philippines"]
-    for line in lines:
-        for region in regions:
-            if region in line:
-                info["region"] = region.title()
-                break
-    
-    # Validation
-    if not info["company_name"]:
-        raise ValueError("Could not extract company name from prompt")
-    if not info["website"]:
-        raise ValueError("Could not extract website from prompt. Please include website URL.")
-    if not info["sector"]:
-        info["sector"] = "Technology"  # Default
-    if not info["region"]:
-        info["region"] = "Global"  # Default
-    
-    return CompanyInfo(**info)
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Fast and cheap for extraction
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a precise data extraction assistant. You extract structured information from text and return only valid JSON."
+                },
+                {
+                    "role": "user",
+                    "content": extraction_prompt
+                }
+            ],
+            temperature=0,
+            response_format={"type": "json_object"}
+        )
+        
+        info = json.loads(response.choices[0].message.content)
+        
+        # Validation
+        if not info.get("company_name"):
+            raise ValueError("Could not extract company name from prompt")
+        
+        # Set defaults only if truly empty
+        if not info.get("sector"):
+            info["sector"] = "Technology"
+        if not info.get("region"):
+            info["region"] = "Global"
+        if not info.get("website"):
+            # Website is optional now - agent can search without it
+            info["website"] = ""
+        
+        return CompanyInfo(**info)
+        
+    except Exception as e:
+        print(f"Error in LLM-based parsing: {e}")
+        # Fallback: try to extract at least company name
+        words = prompt.split()
+        if words:
+            return CompanyInfo(
+                company_name=words[0],
+                website="",
+                sector="Technology",
+                region="Global",
+                hq_location=None
+            )
+        raise ValueError("Could not parse prompt. Please provide company name.")
 
 
 async def generate_research_async(
@@ -867,11 +895,13 @@ async def get_full_analysis(report_id: str):
 async def start_workflow(
     prompt: str = Form(...),
     agent_type: str = Form("openai"),
-    files: List[UploadFile] = File(default=[])
+    files: List[UploadFile] = File(default=[]),
+    run_deep_research: str = Form("true"),
+    run_data_room: str = Form("true")
 ):
     """
     Start a new step-by-step workflow.
-    Returns workflow_id and initiates the first step (Deep Research).
+    Returns workflow_id and initiates the first step.
     """
     try:
         # Parse company info
@@ -906,21 +936,30 @@ async def start_workflow(
                 "size": len(content)
             })
         
-        # Create workflow state
+        # Parse boolean values
+        should_run_deep_research = run_deep_research.lower() == "true"
+        should_run_data_room = run_data_room.lower() == "true" and len(processed_files) > 0
+        
+        # Create workflow state with selected agents
         state = WorkflowState(
             report_id=workflow_id,
             company_info=company_info.dict(),
             files=processed_files,
-            agent_type=agent_type
+            agent_type=agent_type,
+            run_deep_research=should_run_deep_research,
+            run_data_room=should_run_data_room
         )
         workflow_states[workflow_id] = state
+        
+        # Determine first step
+        first_step = state.get_current_step_name()
         
         # Initialize job tracking for status polling
         research_jobs[workflow_id] = {
             "status": "processing",
-            "message": "Starting deep research...",
+            "message": f"Starting {first_step.replace('_', ' ')}...",
             "progress": 0,
-            "current_step": "deep_research",
+            "current_step": first_step,
             "company_info": company_info.dict(),
             "company_name": company_name,
             "type": "workflow",
@@ -991,6 +1030,18 @@ async def stream_workflow_step(workflow_id: str):
             # Yield chunks as they arrive (for all streaming steps)
             if output_task:
                 while True:
+                    # Check if workflow was cancelled
+                    if state.cancelled:
+                        output_task.cancel()
+                        yield {
+                            "event": "error",
+                            "data": json.dumps({
+                                "step": step_name,
+                                "error": "Workflow cancelled by user"
+                            })
+                        }
+                        return
+                    
                     try:
                         chunk = await asyncio.wait_for(stream_queue.get(), timeout=0.1)
                         if chunk is None:  # Sentinel value indicating completion
@@ -1444,6 +1495,37 @@ async def skip_step(workflow_id: str, step_name: str):
         "skipped_step": step_name,
         "next_step": next_step,
         "message": f"Skipped {step_name}, moving to {next_step}"
+    }
+
+
+@app.post("/api/workflow/{workflow_id}/cancel")
+async def cancel_workflow(workflow_id: str):
+    """
+    Cancel the workflow and stop all processing.
+    """
+    if workflow_id not in workflow_states:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    state = workflow_states[workflow_id]
+    
+    # Mark workflow as cancelled
+    state.cancelled = True
+    state.awaiting_review = False
+    
+    # Update current step status
+    current_step = state.get_current_step_name()
+    if current_step != "completed":
+        state.step_status[current_step] = "cancelled"
+    
+    # Update job tracking
+    if workflow_id in research_jobs:
+        research_jobs[workflow_id]["status"] = "cancelled"
+        research_jobs[workflow_id]["message"] = "Workflow cancelled by user"
+    
+    return {
+        "status": "cancelled",
+        "message": "Workflow has been cancelled",
+        "workflow_id": workflow_id
     }
 
 

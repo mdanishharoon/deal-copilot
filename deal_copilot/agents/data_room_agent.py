@@ -511,41 +511,20 @@ Include citations in format: [Source: filename, page X]"""
 
         self._update_progress("qualitative", 35, f"Sending {len(context):,} chars to OpenAI...")
         
-        # Use streaming if callback provided
-        if self.stream_callback:
-            content_parts = []
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_completion_tokens=8000,
-                stream=True
-            )
-            
-            for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    chunk_content = chunk.choices[0].delta.content
-                    content_parts.append(chunk_content)
-                    if self.stream_callback:
-                        self.stream_callback(chunk_content)
-            
-            content = "".join(content_parts)
-        else:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_completion_tokens=8000
-            )
-            
-            if not response or not response.choices or not response.choices[0].message.content:
-                raise ValueError("OpenAI returned empty response for qualitative analysis. This may be due to content filters or API issues.")
-            
-            content = response.choices[0].message.content
+        # DON'T stream qualitative analysis (it's for backend/IC memo only, not for user display)
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_completion_tokens=8000
+        )
+        
+        if not response or not response.choices or not response.choices[0].message.content:
+            raise ValueError("OpenAI returned empty response for qualitative analysis. This may be due to content filters or API issues.")
+        
+        content = response.choices[0].message.content
         
         self._update_progress("qualitative", 50, f"Received {len(content):,} chars from OpenAI")
         
@@ -685,42 +664,21 @@ Begin extraction:"""
 
         self._update_progress("quantitative", 65, f"Sending {len(context):,} chars to OpenAI...")
         
-        # Use streaming if callback provided
-        if self.stream_callback:
-            content_parts = []
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_completion_tokens=16000,
-                stream=True
-            )
-            
-            for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    chunk_content = chunk.choices[0].delta.content
-                    content_parts.append(chunk_content)
-                    if self.stream_callback:
-                        self.stream_callback(chunk_content)
-            
-            content = "".join(content_parts)
-        else:
-            # Use higher token limit for quantitative data (large tables)
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                max_completion_tokens=16000
-            )
-            
-            if not response or not response.choices or not response.choices[0].message.content:
-                raise ValueError("OpenAI returned empty response for quantitative data. This may be due to content filters or API issues.")
-            
-            content = response.choices[0].message.content
+        # DON'T stream quantitative data (it's structured JSON for backend only, not for user display)
+        # Use higher token limit for quantitative data (large tables)
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_completion_tokens=16000
+        )
+        
+        if not response or not response.choices or not response.choices[0].message.content:
+            raise ValueError("OpenAI returned empty response for quantitative data. This may be due to content filters or API issues.")
+        
+        content = response.choices[0].message.content
         
         self._update_progress("quantitative", 75, f"Received {len(content):,} chars from OpenAI")
         

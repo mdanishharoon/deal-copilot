@@ -17,6 +17,7 @@ import {
   continueWorkflow,
   refineStep,
   skipStep,
+  cancelWorkflow,
   createSSEConnection
 } from "@/lib/api";
 import type { CompanyInfo } from "@/lib/types";
@@ -55,11 +56,11 @@ export default function Home() {
     };
   }, []);
 
-  const handleGenerate = async (prompt: string, agentType: string, files?: File[]) => {
+  const handleGenerate = async (prompt: string, agentType: string, files?: File[], selectedAgents?: { deepResearch: boolean; dataRoom: boolean }) => {
     if (workflowMode === "step-by-step") {
-      await handleStepByStepWorkflow(prompt, agentType, files || []);
+      await handleStepByStepWorkflow(prompt, agentType, files || [], selectedAgents);
     } else {
-      await handleAutoWorkflow(prompt, agentType, files || []);
+      await handleAutoWorkflow(prompt, agentType, files || [], selectedAgents);
     }
   };
 
@@ -123,28 +124,33 @@ export default function Home() {
     }
   };
 
-  const handleStepByStepWorkflow = async (prompt: string, agentType: string, files: File[]) => {
+  const handleStepByStepWorkflow = async (prompt: string, agentType: string, files: File[], selectedAgents?: { deepResearch: boolean; dataRoom: boolean }) => {
     setIsLoading(true);
     setProgress(0);
     setLoadingMessage("Starting step-by-step workflow...");
 
     try {
-      const response = await startWorkflow(prompt, files, agentType);
+      const response = await startWorkflow(prompt, files, agentType, selectedAgents);
       setWorkflowId(response.workflow_id);
       setReportId(response.workflow_id);
       setCompanyInfo(response.company_info);
-      setCurrentStep("deep_research");
       
-      // Determine which steps are active based on whether files were provided
-      const hasFiles = files.length > 0;
-      const steps = hasFiles 
-        ? ["deep_research", "data_room", "risk_scanner", "ic_memo"]
-        : ["deep_research", "risk_scanner", "ic_memo"];
+      // Determine which steps are active based on selected agents
+      const runDeepResearch = selectedAgents?.deepResearch !== false;
+      const runDataRoom = selectedAgents?.dataRoom !== false && files.length > 0;
+      
+      const steps: string[] = [];
+      if (runDeepResearch) steps.push("deep_research");
+      if (runDataRoom) steps.push("data_room");
+      steps.push("risk_scanner");
+      steps.push("ic_memo");
+      
       setActiveSteps(steps);
+      setCurrentStep(steps[0]);
       
       setStepStatus({
-        deep_research: "pending",
-        data_room: hasFiles ? "pending" : "skipped",
+        deep_research: runDeepResearch ? "pending" : "skipped",
+        data_room: runDataRoom ? "pending" : "skipped",
         risk_scanner: "pending",
         ic_memo: "pending",
       });
@@ -301,6 +307,40 @@ export default function Home() {
     }
   };
 
+  const handleCancel = async () => {
+    if (!workflowId) return;
+
+    const confirmed = confirm("Are you sure you want to cancel the workflow? This cannot be undone.");
+    if (!confirmed) return;
+
+    try {
+      await cancelWorkflow(workflowId);
+      
+      // Close SSE connection
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      
+      // Reset state
+      setIsLoading(false);
+      setIsProcessingStep(false);
+      setAwaitingReview(false);
+      setStreamingContent("");
+      setLoadingMessage("Workflow cancelled");
+      
+      // Update step status
+      setStepStatus(prev => ({
+        ...prev,
+        [currentStep]: "cancelled"
+      }));
+      
+    } catch (error: any) {
+      console.error("Error cancelling workflow:", error);
+      alert(error.message || "Failed to cancel workflow");
+    }
+  };
+
   const handleNewResearch = () => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -390,6 +430,7 @@ export default function Home() {
             onContinue={handleContinue}
             onRefine={handleRefine}
             onSkip={handleSkip}
+            onCancel={handleCancel}
           />
         )}
 

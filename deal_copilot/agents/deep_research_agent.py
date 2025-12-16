@@ -90,14 +90,14 @@ Your analysis must be:
 4. Focused on investment implications
 5. Formatted as clean HTML (NOT markdown)"""
 
-        user_prompt = f"""Based on the following research data, write a comprehensive Market Overview for the {sector} sector in {region}.
+        user_prompt = f"""Based on the following research data, provide market context for evaluating {company_name} in the {sector} sector in {region}.
 
-Address these key questions:
-1. **Market Sizing & Growth**: What are the TAM/SAM/SOM and CAGR? Include specific numbers with sources.
-2. **Business Model & Monetization**: How do companies in this sector make money? What are key unit economics?
-3. **Market Structure**: Is it fragmented or concentrated? Evidence of winner-takes-most dynamics?
-4. **Drivers & Risks**: Top 3 growth drivers and top 3 threats/risks.
-5. **Outcome Potential**: Can a leader reach $100M+ revenue and $1B+ valuation?
+Focus on what matters for this specific investment opportunity:
+
+1. **Market Size & Growth**: Current market size and CAGR? Is this a large, fast-growing market? Include specific numbers with sources.
+2. **Market Dynamics & Structure**: Is it winner-takes-most or room for multiple players? Network effects or economies of scale? What makes this market attractive or challenging?
+3. **Key Market Drivers & Risks**: Top growth drivers and main threats/risks. How do these affect {company_name}'s opportunity?
+4. **Investment Opportunity**: Can a leader reach $100M+ revenue and $1B+ valuation? Why is now the right time?
 
 Research Data:
 {context}
@@ -114,7 +114,7 @@ FORMATTING INSTRUCTIONS - VERY IMPORTANT:
 - DO NOT return JSON or raw text
 - Return ONLY well-formatted HTML content
 
-Be specific with numbers and data points."""
+Focus on insights relevant to evaluating {company_name}'s opportunity. Skip generic business model descriptions."""
         
         messages = [
             SystemMessage(content=system_prompt),
@@ -316,10 +316,10 @@ Focus on material, investment-relevant information."""
         print(f"Website: {website}")
         print(f"{'='*60}\n")
         
-        # Generate each section
-        market_section = self.generate_market_overview(company_name, sector, region)
-        competitor_section = self.generate_competitor_overview(company_name, sector, region)
+        # Generate each section - Company first (most important!)
         company_section = self.generate_company_overview(company_name, website, sector)
+        competitor_section = self.generate_competitor_overview(company_name, sector, region)
+        market_section = self.generate_market_overview(company_name, sector, region)
         
         # Compile full report
         report = {
@@ -330,9 +330,9 @@ Focus on material, investment-relevant information."""
             "hq_location": hq_location or region,
             "generated_at": datetime.now().isoformat(),
             "sections": [
-                market_section,
-                competitor_section,
-                company_section
+                company_section,      # Company first!
+                competitor_section,   # Then competitive context
+                market_section       # Then broader market context
             ]
         }
         

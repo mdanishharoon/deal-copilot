@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ArrowRight, RefreshCw, SkipForward, Loader2, AlertCircle } from "lucide-react";
+import { Check, ArrowRight, RefreshCw, SkipForward, Loader2, AlertCircle, X } from "lucide-react";
 
 interface WorkflowStep {
   name: string;
@@ -27,6 +27,7 @@ interface WorkflowSectionProps {
   onContinue: () => void;
   onRefine: (feedback: string) => void;
   onSkip: () => void;
+  onCancel: () => void;
 }
 
 export default function WorkflowSection({
@@ -40,6 +41,7 @@ export default function WorkflowSection({
   onContinue,
   onRefine,
   onSkip,
+  onCancel,
 }: WorkflowSectionProps) {
   const [showRefineInput, setShowRefineInput] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -101,22 +103,39 @@ export default function WorkflowSection({
       return output.sections.map((s: any) => `<h3>${s.title || s.section}</h3>${s.content}`).join("\n");
     }
     if (step === "data_room") {
-      // Show human-readable summary instead of structured JSON
+      // Show ONLY human-readable summary (not raw quantitative/qualitative JSON)
       if (output.human_readable_summary?.content) {
-        return `<div style="white-space: pre-wrap; line-height: 1.6;">${output.human_readable_summary.content}</div>`;
+        // Format the summary with proper HTML styling (similar to deep research)
+        let formattedSummary = output.human_readable_summary.content
+          // Convert markdown-style headers to HTML
+          .replace(/\*\*\*(.+?)\*\*\*/g, '<h3 style="margin-top: 1.5rem; margin-bottom: 0.75rem; font-weight: 600; color: #1f2937;">$1</h3>')
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\n\n/g, '</p><p style="margin-bottom: 1rem; line-height: 1.6;">')
+          .replace(/\n/g, '<br/>');
+        
+        // Wrap in paragraphs
+        formattedSummary = '<p style="margin-bottom: 1rem; line-height: 1.6;">' + formattedSummary + '</p>';
+        
+        return `<div style="font-size: 0.95rem;">${formattedSummary}</div>`;
       }
-      // Fallback to old format if summary not available
-      let html = "";
-      if (output.qualitative_analysis?.content) {
-        html += `<h3>Qualitative Analysis</h3><pre style="white-space: pre-wrap;">${output.qualitative_analysis.content}</pre>`;
-      }
-      if (output.quantitative_data?.content) {
-        html += `<h3>Quantitative Data</h3><pre style="white-space: pre-wrap;">${output.quantitative_data.content}</pre>`;
-      }
-      return html || JSON.stringify(output, null, 2);
+      // Fallback if summary not available
+      return `<p style="color: #6b7280;">Data room summary not available. Raw data has been processed for IC Memo.</p>`;
     }
-    if (step === "risk_scanner" && output.risk_analysis?.content) {
-      return `<pre style="white-space: pre-wrap;">${output.risk_analysis.content}</pre>`;
+    if (step === "risk_scanner") {
+      // Display human-readable summary for frontend, not the JSON
+      if (output.human_readable_summary) {
+        // Convert markdown to basic HTML
+        const summary = output.human_readable_summary
+          .replace(/\n/g, '<br/>')
+          .replace(/### (.*?)(<br\/>|$)/g, '<h4>$1</h4>')
+          .replace(/## (.*?)(<br\/>|$)/g, '<h3>$1</h3>')
+          .replace(/# (.*?)(<br\/>|$)/g, '<h2>$1</h2>')
+          .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+          .replace(/---<br\/>/g, '<hr/>');
+        return summary;
+      }
+      // Fallback to JSON if summary not available
+      return `<pre style="white-space: pre-wrap;">${JSON.stringify(output.risk_analysis, null, 2)}</pre>`;
     }
     if (step === "ic_memo" && output.memo_content?.content) {
       return output.memo_content.content;
@@ -179,12 +198,25 @@ export default function WorkflowSection({
             </p>
           </div>
           
-          {isProcessing && (
-            <div className="flex items-center text-blue-600">
-              <Loader2 className="w-5 h-5 animate-spin mr-2" />
-              <span className="text-sm font-medium">Processing...</span>
-            </div>
-          )}
+          <div className="flex items-center gap-3">
+            {isProcessing && (
+              <div className="flex items-center text-blue-600">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                <span className="text-sm font-medium">Processing...</span>
+              </div>
+            )}
+            
+            {(isProcessing || !awaitingReview) && currentStep !== "completed" && (
+              <button
+                onClick={onCancel}
+                className="px-4 py-2 text-sm font-medium text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-600 rounded-lg flex items-center gap-2 transition-colors"
+                title="Cancel workflow"
+              >
+                <X className="w-4 h-4" />
+                Stop
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Output Display */}

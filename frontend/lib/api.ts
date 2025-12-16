@@ -135,7 +135,8 @@ export async function getFullAnalysis(reportId: string): Promise<any> {
 export async function startWorkflow(
   prompt: string,
   files: File[],
-  agentType: string = "openai"
+  agentType: string = "openai",
+  selectedAgents?: { deepResearch: boolean; dataRoom: boolean }
 ): Promise<{ workflow_id: string; company_info: any; sse_endpoint: string }> {
   const formData = new FormData();
   
@@ -147,6 +148,12 @@ export async function startWorkflow(
   }
   formData.append('prompt', prompt);
   formData.append('agent_type', agentType);
+  
+  // Send selected agents
+  if (selectedAgents) {
+    formData.append('run_deep_research', String(selectedAgents.deepResearch));
+    formData.append('run_data_room', String(selectedAgents.dataRoom));
+  }
 
   const response = await fetch(`${API_BASE_URL}/api/workflow/start`, {
     method: "POST",
@@ -219,6 +226,19 @@ export async function skipStep(workflowId: string, stepName: string): Promise<an
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.detail || "Failed to skip step");
+  }
+
+  return response.json();
+}
+
+export async function cancelWorkflow(workflowId: string): Promise<any> {
+  const response = await fetch(`${API_BASE_URL}/api/workflow/${workflowId}/cancel`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.detail || "Failed to cancel workflow");
   }
 
   return response.json();

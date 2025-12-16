@@ -84,10 +84,15 @@ class RiskScannerAgent:
         
         self._update_progress("risk_scan", 80, "Validating risks and generating DD checklist...")
         
+        # Generate human-readable summary for frontend display
+        self._update_progress("risk_scan", 90, "Generating human-readable summary...")
+        human_summary = self._generate_human_readable_summary(company_name, risk_analysis)
+        
         return {
             "company_name": company_name,
             "generated_at": datetime.now().isoformat(),
             "risk_analysis": risk_analysis,
+            "human_readable_summary": human_summary,  # For frontend display
             "sources_analyzed": {
                 "deep_research": deep_research_report is not None,
                 "data_room": data_room_report is not None
@@ -266,6 +271,97 @@ REQUIREMENTS:
             "structured_data": risk_data,
             "generated_at": datetime.now().isoformat()
         }
+    
+    def _generate_human_readable_summary(self, company_name: str, risk_analysis: Dict) -> str:
+        """Generate a human-readable narrative summary of the risk analysis for frontend display"""
+        
+        structured_data = risk_analysis.get("structured_data", {})
+        top_risks = structured_data.get("top_risks", [])
+        open_questions = structured_data.get("open_questions", [])
+        data_issues = structured_data.get("data_quality_issues", [])
+        
+        summary_parts = []
+        
+        summary_parts.append(f"# Risk Analysis Summary for {company_name}\n")
+        summary_parts.append(f"Generated: {risk_analysis.get('generated_at', 'N/A')}\n\n")
+        
+        # Executive Summary
+        total_risks = len(top_risks)
+        high_severity = sum(1 for r in top_risks if r.get('severity', '').lower() == 'high')
+        
+        summary_parts.append("## Executive Summary\n\n")
+        summary_parts.append(f"This risk analysis identified **{total_risks} material risks** requiring attention, ")
+        summary_parts.append(f"including **{high_severity} high-severity items**. ")
+        summary_parts.append(f"Additionally, {len(open_questions)} open questions were flagged for further due diligence")
+        if data_issues:
+            summary_parts.append(f", along with {len(data_issues)} data quality concerns")
+        summary_parts.append(".\n\n")
+        
+        # Top Material Risks
+        if top_risks:
+            summary_parts.append("## Top Material Risks\n\n")
+            for i, risk in enumerate(top_risks, 1):
+                severity = risk.get('severity', 'Medium')
+                emoji = "🔴" if severity.lower() == "high" else "🟡" if severity.lower() == "medium" else "🟢"
+                
+                summary_parts.append(f"### {emoji} Risk {i}: {risk.get('risk', 'Unknown')}\n\n")
+                summary_parts.append(f"**Category:** {risk.get('category', 'N/A')}  \n")
+                summary_parts.append(f"**Severity:** {severity}  \n\n")
+                summary_parts.append(f"**Evidence:** {risk.get('evidence', 'N/A')}  \n")
+                summary_parts.append(f"**Source:** {risk.get('source', 'N/A')}  \n\n")
+                summary_parts.append(f"**Potential Impact:**  \n{risk.get('potential_impact', 'N/A')}\n\n")
+                
+                if risk.get('mitigant'):
+                    summary_parts.append(f"**Potential Mitigants:**  \n{risk.get('mitigant')}\n\n")
+                
+                summary_parts.append("---\n\n")
+        
+        # Open Questions
+        if open_questions:
+            summary_parts.append("## Open Questions for Further Due Diligence\n\n")
+            summary_parts.append("The following areas require additional investigation:\n\n")
+            
+            for i, q in enumerate(open_questions, 1):
+                priority = q.get('priority', 'Medium')
+                emoji = "❗" if priority.lower() == "high" else "⚠️" if priority.lower() == "medium" else "ℹ️"
+                
+                summary_parts.append(f"### {emoji} Question {i}: {q.get('question', 'Unknown')}\n\n")
+                summary_parts.append(f"**Category:** {q.get('category', 'N/A')}  \n")
+                summary_parts.append(f"**Priority:** {priority}  \n\n")
+                
+                if q.get('context'):
+                    summary_parts.append(f"**Context:** {q.get('context')}  \n\n")
+                
+                if q.get('suggested_dd'):
+                    summary_parts.append(f"**Suggested Due Diligence:**  \n{q.get('suggested_dd')}\n\n")
+                
+                summary_parts.append("---\n\n")
+        
+        # Data Quality Issues
+        if data_issues:
+            summary_parts.append("## Data Quality & Consistency Issues\n\n")
+            summary_parts.append("The following data discrepancies were identified and should be clarified:\n\n")
+            
+            for i, issue in enumerate(data_issues, 1):
+                summary_parts.append(f"### ⚠️ Issue {i}: {issue.get('issue', 'Unknown')}\n\n")
+                summary_parts.append(f"**Description:** {issue.get('description', 'N/A')}  \n")
+                summary_parts.append(f"**Sources:** {issue.get('sources', 'N/A')}  \n")
+                
+                if issue.get('recommendation'):
+                    summary_parts.append(f"**Recommendation:** {issue.get('recommendation')}  \n\n")
+                
+                summary_parts.append("---\n\n")
+        
+        # Conclusion
+        summary_parts.append("## Next Steps\n\n")
+        summary_parts.append("Based on this risk analysis:\n\n")
+        summary_parts.append(f"1. **Address High-Severity Risks:** {high_severity} high-severity risks require immediate attention and mitigation plans\n")
+        summary_parts.append(f"2. **Conduct Further DD:** {len(open_questions)} open questions should be investigated during the due diligence process\n")
+        if data_issues:
+            summary_parts.append(f"3. **Resolve Data Issues:** {len(data_issues)} data inconsistencies should be clarified with management\n")
+        summary_parts.append("\nAll identified risks should be discussed with the investment committee and factored into the investment decision.\n")
+        
+        return "".join(summary_parts)
     
     def format_report_as_text(self, report: Dict) -> str:
         """Format the risk scanner report as readable text"""

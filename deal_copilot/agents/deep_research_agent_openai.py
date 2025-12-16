@@ -49,28 +49,34 @@ class DeepResearchAgentOpenAI:
         
         prompt = f"""You are a world-class investment analyst conducting market research for a VC/PE firm.
 
-Research the {sector} sector in {region} and produce a comprehensive Market Overview.
+Research the {sector} market in {region} to provide market context for evaluating {company_name}.
 
-Use web search to find current data and address these key questions:
+Your analysis should focus on what matters for this specific investment opportunity:
 
-1. **Market Sizing & Growth**: What are the TAM/SAM/SOM and CAGR for {sector} in {region}? Include specific numbers with sources.
+1. **Market Size & Growth**:
+   - Current market size and CAGR for {sector} in {region}
+   - Is this a large, fast-growing market? What's driving growth?
+   - Include specific numbers with sources
 
-2. **Business Model & Monetization**: How do companies in the {sector} sector make money? What are the typical revenue models, cost structures, and key unit economics (margins, CAC/LTV, scalability)?
+2. **Market Dynamics & Structure**:
+   - Is this winner-takes-most or room for multiple players?
+   - Are there network effects, economies of scale, or data moats in this market?
+   - What makes this market attractive or challenging?
 
-3. **Market Structure & Dynamics**: Is the market fragmented or concentrated? Is there evidence of winner-takes-most dynamics (network effects, economies of scale, data moats)?
+3. **Key Market Drivers & Risks**:
+   - What are the top growth drivers (regulatory tailwinds, digitization, AI adoption, demographics, etc.)?
+   - What are the main threats/risks (regulatory headwinds, supply constraints, platform dependency, cyclicality)?
+   - How do these affect {company_name}'s opportunity?
 
-4. **Drivers & Risks**: 
-   - What are the top 3 market growth drivers (regulatory tailwinds, digitization, AI adoption, demographics, etc.)?
-   - What are the top 3 market threats/risks (regulatory headwinds, supply constraints, platform dependency, cyclicality, substitution)?
-
-5. **Outcome Potential**: Based on market dynamics, can a leader realistically reach $100M+ revenue and $1B+ valuation within a typical VC holding period (5-7 years)?
+4. **Investment Opportunity**:
+   - Can a leader in this space realistically reach $100M+ revenue and $1B+ valuation?
+   - Why is now the right time for {sector} in {region}?
 
 Requirements:
+- Focus on insights relevant to evaluating {company_name}'s opportunity
 - Use CURRENT data (2024-2025) where available
-- Include specific numbers, percentages, and growth rates
-- Cite sources inline in format <a href="URL" target="_blank" class="text-blue-600 hover:underline">[Source]</a>
-- Write in professional, investment-grade prose
-- Focus on investment implications and insights
+- Include key data points with sources
+- Skip generic business model descriptions - focus on market dynamics
 - Be specific to {region} while drawing global comparisons where relevant
 
 FORMATTING INSTRUCTIONS - VERY IMPORTANT:
@@ -85,7 +91,7 @@ FORMATTING INSTRUCTIONS - VERY IMPORTANT:
 - DO NOT return JSON or raw text
 - Return ONLY well-formatted HTML content
 
-Search the web thoroughly and provide a detailed, data-driven analysis."""
+Search the web and provide focused market context for this investment opportunity."""
 
         try:
             # Use streaming if callback provided
@@ -431,10 +437,10 @@ Search the web thoroughly and provide comprehensive company intelligence."""
         print(f"Model: {self.model}")
         print(f"{'='*60}\n")
         
-        # Generate each section
-        market_section = self.generate_market_overview(company_name, sector, region)
-        competitor_section = self.generate_competitor_overview(company_name, sector, region)
+        # Generate each section - Company first (most important!)
         company_section = self.generate_company_overview(company_name, website, sector)
+        competitor_section = self.generate_competitor_overview(company_name, sector, region)
+        market_section = self.generate_market_overview(company_name, sector, region)
         
         # Compile full report
         report = {
@@ -446,9 +452,9 @@ Search the web thoroughly and provide comprehensive company intelligence."""
             "model": self.model,
             "generated_at": datetime.now().isoformat(),
             "sections": [
-                market_section,
-                competitor_section,
-                company_section
+                company_section,      # Company first!
+                competitor_section,   # Then competitive context
+                market_section       # Then broader market context
             ]
         }
         
