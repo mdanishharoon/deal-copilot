@@ -94,49 +94,27 @@ FORMATTING INSTRUCTIONS - VERY IMPORTANT:
 Search the web and provide focused market context for this investment opportunity."""
 
         try:
-            # Use streaming if callback provided
+            # Combine system message into the prompt
+            full_input = f"""You are an expert investment analyst with deep knowledge of market research and due diligence. You have access to web search to find current, factual information.
+
+{prompt}"""
+            
+            # Use Responses API with web search enabled
+            response = self.client.responses.create(
+                model=self.model,
+                tools=[{"type": "web_search"}],
+                input=full_input
+            )
+            
+            content = response.output_text
+            
+            # Stream the content if callback provided (simulate streaming since Responses API returns complete response)
             if self.stream_callback:
-                content_parts = []
-                stream = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert investment analyst with deep knowledge of market research and due diligence. You have access to web search to find current, factual information."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    max_completion_tokens=config.MAX_TOKENS,
-                    stream=True
-                )
-                
-                for chunk in stream:
-                    if chunk.choices[0].delta.content:
-                        chunk_content = chunk.choices[0].delta.content
-                        content_parts.append(chunk_content)
-                        if self.stream_callback:
-                            self.stream_callback(chunk_content)
-                
-                content = "".join(content_parts)
-            else:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert investment analyst with deep knowledge of market research and due diligence. You have access to web search to find current, factual information."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    max_completion_tokens=config.MAX_TOKENS
-                )
-                content = response.choices[0].message.content
+                # Split into chunks and stream
+                chunk_size = 50
+                for i in range(0, len(content), chunk_size):
+                    chunk = content[i:i+chunk_size]
+                    self.stream_callback(chunk)
             
             return {
                 "section": "Market Overview",
@@ -218,49 +196,27 @@ FORMATTING INSTRUCTIONS - VERY IMPORTANT:
 Search the web thoroughly and provide detailed competitive intelligence."""
 
         try:
-            # Use streaming if callback provided
+            # Combine system message into the prompt
+            full_input = f"""You are an expert investment analyst specializing in competitive analysis and market intelligence. Use web search to find current, factual information.
+
+{prompt}"""
+            
+            # Use Responses API with web search enabled
+            response = self.client.responses.create(
+                model=self.model,
+                tools=[{"type": "web_search"}],
+                input=full_input
+            )
+            
+            content = response.output_text
+            
+            # Stream the content if callback provided (simulate streaming since Responses API returns complete response)
             if self.stream_callback:
-                content_parts = []
-                stream = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert investment analyst specializing in competitive analysis and market intelligence. Use web search to find current, factual information."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    max_completion_tokens=config.MAX_TOKENS,
-                    stream=True
-                )
-                
-                for chunk in stream:
-                    if chunk.choices[0].delta.content:
-                        chunk_content = chunk.choices[0].delta.content
-                        content_parts.append(chunk_content)
-                        if self.stream_callback:
-                            self.stream_callback(chunk_content)
-                
-                content = "".join(content_parts)
-            else:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert investment analyst specializing in competitive analysis and market intelligence. Use web search to find current, factual information."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    max_completion_tokens=config.MAX_TOKENS
-                )
-                content = response.choices[0].message.content
+                # Split into chunks and stream
+                chunk_size = 50
+                for i in range(0, len(content), chunk_size):
+                    chunk = content[i:i+chunk_size]
+                    self.stream_callback(chunk)
             
             return {
                 "section": "Competitor Overview",
@@ -346,49 +302,27 @@ FORMATTING INSTRUCTIONS - VERY IMPORTANT:
 Search the web thoroughly and provide comprehensive company intelligence."""
 
         try:
-            # Use streaming if callback provided
+            # Combine system message into the prompt
+            full_input = f"""You are an expert investment analyst conducting company due diligence. Use web search to find current, factual information about the company, team, and recent news.
+
+{prompt}"""
+            
+            # Use Responses API with web search enabled
+            response = self.client.responses.create(
+                model=self.model,
+                tools=[{"type": "web_search"}],
+                input=full_input
+            )
+            
+            content = response.output_text
+            
+            # Stream the content if callback provided (simulate streaming since Responses API returns complete response)
             if self.stream_callback:
-                content_parts = []
-                stream = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert investment analyst conducting company due diligence. Use web search to find current, factual information about the company, team, and recent news."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    max_completion_tokens=config.MAX_TOKENS,
-                    stream=True
-                )
-                
-                for chunk in stream:
-                    if chunk.choices[0].delta.content:
-                        chunk_content = chunk.choices[0].delta.content
-                        content_parts.append(chunk_content)
-                        if self.stream_callback:
-                            self.stream_callback(chunk_content)
-                
-                content = "".join(content_parts)
-            else:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=[
-                        {
-                            "role": "system",
-                            "content": "You are an expert investment analyst conducting company due diligence. Use web search to find current, factual information about the company, team, and recent news."
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    max_completion_tokens=config.MAX_TOKENS
-                )
-                content = response.choices[0].message.content
+                # Split into chunks and stream
+                chunk_size = 50
+                for i in range(0, len(content), chunk_size):
+                    chunk = content[i:i+chunk_size]
+                    self.stream_callback(chunk)
             
             return {
                 "section": "Company/Team Overview and Newsrun",
