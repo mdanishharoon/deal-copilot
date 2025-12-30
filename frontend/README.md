@@ -2,17 +2,17 @@
 
 Modern, professional SaaS frontend built with Next.js 15, TypeScript, and Tailwind CSS.
 
-## 🚀 Features
+## Features
 
-- ✨ **Modern UI** - Beautiful gradient design with smooth animations
-- ⚡ **Next.js 15** - Latest features with App Router
-- 🎨 **Tailwind CSS** - Utility-first styling
-- 📱 **Fully Responsive** - Works on all devices
-- 🔄 **Real-time Updates** - Progress tracking with polling
-- 💬 **Natural Language** - Simple, intuitive input
-- 📊 **Beautiful Reports** - Professional formatting with citations
+- **Modern UI** - Beautiful gradient design with smooth animations
+- **Next.js 15** - Latest features with App Router
+- **Tailwind CSS** - Utility-first styling
+- **Fully Responsive** - Works on all devices
+- **Real-time Updates** - Progress tracking with polling
+- **Natural Language** - Simple, intuitive input
+- **Beautiful Reports** - Professional formatting with citations
 
-## 🏗️ Tech Stack
+## Tech Stack
 
 - **Next.js 15** - React framework
 - **TypeScript** - Type safety
@@ -20,7 +20,7 @@ Modern, professional SaaS frontend built with Next.js 15, TypeScript, and Tailwi
 - **Lucide React** - Icons
 - **Axios** - HTTP client
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 frontend/
@@ -43,7 +43,7 @@ frontend/
 └── next.config.ts           # Next.js config
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Development
 
@@ -68,7 +68,7 @@ npm run build
 npm start
 ```
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -110,7 +110,7 @@ theme: {
 }
 ```
 
-## 🎨 Components
+## Components
 
 ### Header
 Navigation bar with logo and links.
@@ -133,7 +133,7 @@ Navigation bar with logo and links.
 - Formatted sections with icons
 - Inline citations as links
 
-## 📡 API Integration
+## API Integration
 
 ### Create Research
 
@@ -170,7 +170,7 @@ import { downloadReport } from "@/lib/api";
 downloadReport(reportId, companyName);
 ```
 
-## 🎯 Key Features
+## Key Features
 
 ### Real-time Progress
 
@@ -208,7 +208,7 @@ function formatContent(content: string): string {
 - Tablet: Optimized layouts
 - Desktop: Full multi-column layouts
 
-## 🚢 Deployment
+## Deployment
 
 ### Vercel (Recommended)
 
@@ -255,7 +255,7 @@ server {
 }
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Port Already in Use
 
@@ -288,13 +288,13 @@ npm install
 npm run build
 ```
 
-## 📊 Performance
+## Performance
 
 - **First Load**: ~150-200ms
 - **Route Changes**: ~50ms (client-side)
 - **API Calls**: ~2-5 min (research generation)
 
-## 🔐 Security
+## Security
 
 ### Production Checklist
 
@@ -305,7 +305,7 @@ npm run build
 - [ ] Add authentication (if needed)
 - [ ] Use environment secrets
 
-## 📝 Scripts
+## Scripts
 
 ```bash
 npm run dev      # Start development server
@@ -314,14 +314,14 @@ npm start        # Start production server
 npm run lint     # Run ESLint
 ```
 
-## 🤝 Contributing
+## Contributing
 
 1. Create a new component in `components/`
 2. Add types to `lib/types.ts`
 3. Use Tailwind classes for styling
 4. Follow the existing component patterns
 
-## 📚 Resources
+## Resources
 
 - [Next.js Docs](https://nextjs.org/docs)
 - [Tailwind CSS](https://tailwindcss.com/)
@@ -330,5 +330,5 @@ npm run lint     # Run ESLint
 
 ---
 
-**Built with** ❤️ **using Next.js, TypeScript, and Tailwind CSS**
+**Built with love using Next.js, TypeScript, and Tailwind CSS**
 

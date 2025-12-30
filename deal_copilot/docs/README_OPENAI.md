@@ -166,7 +166,7 @@ No manual orchestration of search + analysis needed!
 
 ## Pros & Cons
 
-### Advantages ✅
+### Advantages
 
 - **Simpler** - Only one API key needed
 - **Faster** - Single call per section (vs multiple with RAG)
@@ -174,7 +174,7 @@ No manual orchestration of search + analysis needed!
 - **Powerful** - GPT-4o is state-of-the-art
 - **Easier maintenance** - Fewer moving parts
 
-### Disadvantages ❌
+### Disadvantages
 
 - **More expensive** - GPT-4o costs more than Gemini 2.5
 - **Less control** - Can't see what OpenAI searches
@@ -195,14 +195,14 @@ OpenAI is 3-5x more expensive but simpler to implement.
 
 ## When to Use This Version
 
-✅ **Use OpenAI version if:**
+**Use OpenAI version if:**
 - Building quick POC/demo
 - Need fastest development time
 - Already using OpenAI
 - Want simplest architecture
 - Quality > cost
 
-❌ **Use Gemini + Tavily if:**
+**Use Gemini + Tavily if:**
 - Need cost optimization
 - Want control over sources
 - Compliance requires audit trails
@@ -275,7 +275,7 @@ To extend this version:
 
 ---
 
-**Built with** ❤️ **using OpenAI GPT-4o**
+**Built with love using OpenAI GPT-4o**
 
 
 

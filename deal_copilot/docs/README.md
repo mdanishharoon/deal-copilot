@@ -2,7 +2,7 @@
 
 A proof-of-concept implementation of the Deep Research Agent from the Deal Co-Pilot system, designed to help VC/PE analysts conduct first-pass investment due diligence.
 
-> **📌 Two Versions Available:**
+> **Note: Two Versions Available:**
 > - **Gemini 2.5 + Tavily** (This README) - RAG architecture with explicit search control
 > - **OpenAI GPT-4o** ([README_OPENAI.md](README_OPENAI.md)) - Integrated search, simpler setup
 > 
@@ -239,12 +239,12 @@ You can modify agent behavior in `config.py`:
 
 ## Key Features
 
-✅ **Multi-source research** - Combines multiple web searches per section  
-✅ **Inline citations** - Every claim includes source URL  
-✅ **Investment-focused** - Addresses key due diligence questions  
-✅ **Flexible input** - Interactive or command-line modes  
-✅ **Multiple outputs** - Text or JSON format  
-✅ **Production-ready structure** - Easy to extend with additional agents  
+* **Multi-source research** - Combines multiple web searches per section  
+* **Inline citations** - Every claim includes source URL  
+* **Investment-focused** - Addresses key due diligence questions  
+* **Flexible input** - Interactive or command-line modes  
+* **Multiple outputs** - Text or JSON format  
+* **Production-ready structure** - Easy to extend with additional agents  
 
 ## Limitations & Future Work
 
