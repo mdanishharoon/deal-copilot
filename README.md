@@ -2,9 +2,9 @@
 
 A modern **full-stack SaaS application** for AI-powered investment due diligence research.
 
-🌐 **Web Application** | 🚀 **FastAPI Backend** | 🤖 **AI Agents** | ✨ **Beautiful UI**
+**Web Application** | **FastAPI Backend** | **AI Agents** | **Beautiful UI**
 
-## ⚡ Quick Start - Full-Stack Application
+## Quick Start - Full-Stack Application
 
 ```bash
 # 1. Install Python dependencies
@@ -23,7 +23,7 @@ export OPENAI_API_KEY="your_key_here"
 open http://localhost:3000
 ```
 
-That's it! 🎉
+That's it!
 
 ### Or Run Separately
 
@@ -35,18 +35,18 @@ That's it! 🎉
 cd frontend && npm run dev
 ```
 
-## 🎯 What You Get
+## What You Get
 
-- ✨ **Next.js 15 Frontend** - Modern React with TypeScript
-- 🎨 **Tailwind CSS** - Beautiful, responsive design
-- 💬 **Natural Language Input** - Just describe the company
-- ⚡ **Real-time Progress** - Watch research generate live
-- 📊 **Formatted Reports** - Professional, cited research
-- 📱 **Fully Responsive** - Works on all devices
-- 🚀 **Fast API Backend** - Python-based REST API
-- 🤖 **Dual AI Agents** - OpenAI & Gemini options
+- **Next.js 15 Frontend** - Modern React with TypeScript
+- **Tailwind CSS** - Beautiful, responsive design
+- **Natural Language Input** - Just describe the company
+- **Real-time Progress** - Watch research generate live
+- **Formatted Reports** - Professional, cited research
+- **Fully Responsive** - Works on all devices
+- **Fast API Backend** - Python-based REST API
+- **Dual AI Agents** - OpenAI & Gemini options
 
-## 📖 Quick Start - Command Line
+## Quick Start - Command Line
 
 ### Option 1: OpenAI (Simplest - No Tavily!)
 
@@ -75,11 +75,11 @@ pip install -r requirements.txt
 python -m deal_copilot.examples.example_run
 ```
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 vinnie/
-├── frontend/                         # 🎨 Next.js Frontend
+├── frontend/                         # Next.js Frontend
 │   ├── app/
 │   │   ├── globals.css              # Tailwind styles
 │   │   ├── layout.tsx               # Root layout
@@ -95,42 +95,42 @@ vinnie/
 │   ├── package.json                 # NPM dependencies
 │   └── README.md                    # Frontend docs
 │
-├── deal_copilot/                     # 🐍 Python Backend
-│   ├── api/                         # 🔌 FastAPI Backend
+├── deal_copilot/                     # Python Backend
+│   ├── api/                         # FastAPI Backend
 │   │   └── main.py                  # REST API server
-│   ├── agents/                      # 🤖 AI Research Agents
+│   ├── agents/                      # AI Research Agents
 │   │   ├── deep_research_agent.py        # Gemini + Tavily
 │   │   └── deep_research_agent_openai.py # OpenAI
-│   ├── config/                      # ⚙️  Configuration
+│   ├── config/                      # Configuration
 │   │   ├── config.py                # Gemini + Tavily
 │   │   └── config_openai.py         # OpenAI
-│   ├── cli/                         # 💻 Command-line tools
-│   ├── examples/                    # 🚀 Example scripts
-│   ├── docs/                        # 📚 Documentation
-│   └── output/                      # 📊 Generated reports
+│   ├── cli/                         # Command-line tools
+│   ├── examples/                    # Example scripts
+│   ├── docs/                        # Documentation
+│   └── output/                      # Generated reports
 │
-├── run_fullstack.sh                 # ▶️  Run frontend + backend
-├── run_server.sh                    # ▶️  Backend only
-├── requirements.txt                 # 📦 Python dependencies
-├── .env                            # 🔑 API keys
-├── README.md                        # 📖 This file
-└── GETTING_STARTED.md              # 🚀 Setup guide
+├── run_fullstack.sh                 # Run frontend + backend
+├── run_server.sh                    # Backend only
+├── requirements.txt                 # Python dependencies
+├── .env                            # API keys
+├── README.md                        # This file
+└── GETTING_STARTED.md              # Setup guide
 ```
 
-## 📚 Documentation
+## Documentation
 
-### 🌟 Start Here
+### Start Here
 - **[Getting Started](GETTING_STARTED.md)** - Complete setup guide (5 minutes)
 - **[Quick Reference](QUICK_REFERENCE.md)** - Commands cheat sheet
 
-### 📖 Full Documentation
+### Full Documentation
 - **[Full-Stack Guide](deal_copilot/docs/FULLSTACK.md)** - Web app architecture & API docs
 - **[Project Summary](deal_copilot/docs/PROJECT_SUMMARY.md)** - Complete project overview
 - **[Comparison Guide](deal_copilot/docs/COMPARISON.md)** - OpenAI vs Gemini + Tavily
 - **[OpenAI Version](deal_copilot/docs/README_OPENAI.md)** - OpenAI-specific docs
 - **[Gemini Version](deal_copilot/docs/README.md)** - Gemini + Tavily docs
 
-## 🎯 What It Does
+## What It Does
 
 The Deep Research Agent produces investor-grade research reports with:
 
@@ -140,7 +140,7 @@ The Deep Research Agent produces investor-grade research reports with:
 
 All with inline citations from web sources!
 
-## 💻 Usage
+## Usage
 
 ### Run with Command Line
 
@@ -176,7 +176,7 @@ report = agent.generate_full_report(
 print(agent.format_report_as_text(report))
 ```
 
-## 🔑 API Keys Required
+## API Keys Required
 
 ### For OpenAI Version (Simpler):
 - **OpenAI API Key**: Get at https://platform.openai.com/api-keys
@@ -195,18 +195,18 @@ GOOGLE_API_KEY=your_key_here
 TAVILY_API_KEY=your_key_here
 ```
 
-## 💡 Which Version to Use?
+## Which Version to Use?
 
 | Feature | Gemini + Tavily | OpenAI |
 |---------|----------------|---------|
-| **Setup** | 2 API keys | 1 API key ✨ |
+| **Setup** | 2 API keys | 1 API key |
 | **Cost** | ~$0.10-0.30/report | ~$0.50-1.00/report |
 | **Control** | Full search control | No control |
-| **Free Tier** | Yes ✨ | No |
+| **Free Tier** | Yes | No |
 
 **Recommendation:** Start with OpenAI for simplicity, switch to Gemini + Tavily for production.
 
-## 🛠️ Development
+## Development
 
 ```bash
 # Install in development mode
@@ -219,15 +219,15 @@ pytest
 black deal_copilot/
 ```
 
-## 📝 License
+## License
 
 This is a proof-of-concept for demonstration purposes.
 
-## 🤝 Contributing
+## Contributing
 
 See documentation in `deal_copilot/docs/` for details.
 
 ---
 
-**Built with** ❤️ **using LangChain, Gemini, OpenAI, and Tavily**
+**Built with love using LangChain, Gemini, OpenAI, and Tavily**
 
